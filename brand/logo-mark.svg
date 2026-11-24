@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 500 500" role="img" aria-label="Arcane">
+  <defs><style>@import url("https://fonts.googleapis.com/css2?family=Anton&amp;family=Cinzel:wght@500;700&amp;display=swap");</style></defs>
+  <circle cx="250" cy="250" r="245" fill="#7A0A0A"/>
+  <circle cx="250" cy="250" r="222" fill="none" stroke="#C9A227" stroke-width="6"/>
+  <text x="250" y="355" text-anchor="middle" font-family="Anton, Impact, sans-serif" font-size="290" fill="#C9A227">A</text>
+  <path d="M0,-1 Q0,0 1,0 Q0,0 0,1 Q0,0 -1,0 Q0,0 0,-1 Z" transform="translate(250 118) scale(22)" fill="#C9A227"/>
+</svg>

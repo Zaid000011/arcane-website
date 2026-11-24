@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 500 500" role="img" aria-label="Arcane STUDIOS">
+  <defs>
+    <style>@import url("https://fonts.googleapis.com/css2?family=Anton&amp;family=Cinzel:wght@700&amp;display=swap");</style>
+    <path id="top" d="M66,250 A184,184 0 0,1 434,250"/>
+    <path id="bottom" d="M52,250 A198,198 0 0,0 448,250"/>
+  </defs>
+  <circle cx="250" cy="250" r="245" fill="#7A0A0A"/>
+  <circle cx="250" cy="250" r="230" fill="none" stroke="#C9A227" stroke-width="3"/>
+  <circle cx="250" cy="250" r="160" fill="none" stroke="#C9A227" stroke-width="1.5"/>
+  <text font-family="Cinzel, serif" font-weight="700" font-size="21" fill="#C9A227"><textPath href="#top" startOffset="50%" text-anchor="middle" textLength="470" lengthAdjust="spacing">SENIORS ✦ CLUBS ✦ UNIFORMS ✦ MERCH</textPath></text>
+  <text font-family="Cinzel, serif" font-weight="700" font-size="28" letter-spacing="12" fill="#C9A227"><textPath href="#bottom" startOffset="50%" text-anchor="middle">STUDIOS</textPath></text>
+  <path d="M0,-1 Q0,0 1,0 Q0,0 0,1 Q0,0 -1,0 Q0,0 0,-1 Z" transform="translate(56 250) scale(9)" fill="#C9A227"/>
+  <path d="M0,-1 Q0,0 1,0 Q0,0 0,1 Q0,0 -1,0 Q0,0 0,-1 Z" transform="translate(444 250) scale(9)" fill="#C9A227"/>
+  <text x="250" y="290" text-anchor="middle" font-family="Anton, Impact, sans-serif" font-size="100" letter-spacing="2" fill="#C9A227">ARCANE</text>
+</svg>
