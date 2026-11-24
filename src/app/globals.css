@@ -1,0 +1,327 @@
+@import "tailwindcss";
+
+@theme inline {
+  --color-ink: #140a0b;
+  --color-ink-2: #1c0e10;
+  --color-wine: #4a1218;
+  --color-wine-deep: #2c0b10;
+  --color-arcane: #7a0a0a;
+  --color-arcane-bright: #9b1414;
+  --color-gold: #c9a227;
+  --color-gold-light: #e2c766;
+  --color-cream: #f5ebd8;
+  --color-cream-muted: #c9b79c;
+  --color-line: rgb(201 162 39 / 0.2);
+
+  --font-display: var(--display-stack);
+  --font-serif: var(--serif-stack);
+  --font-sans: var(--sans-stack);
+  --font-brand: var(--font-anton), Impact, sans-serif;
+
+  --animate-float: float 7s ease-in-out infinite;
+  --animate-spin-slow: spin 90s linear infinite;
+  --animate-twinkle: twinkle 3.2s ease-in-out infinite;
+  /* Home page entrance */
+  --animate-glide-in: glide-in 1.6s cubic-bezier(0.16, 1, 0.3, 1) both;
+  --animate-rise-in: rise-in 0.9s cubic-bezier(0.22, 1, 0.36, 1) both;
+  --animate-fade-up: fade-up 0.8s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+:root {
+  --display-stack: var(--font-anton), "Bebas Neue", Impact, sans-serif;
+  --serif-stack: var(--font-cinzel), "Playfair Display", Georgia, serif;
+  --sans-stack: var(--font-inter), system-ui, sans-serif;
+  color-scheme: dark;
+}
+
+:root[lang="ar"] {
+  --display-stack: var(--font-cairo), system-ui, sans-serif;
+  --serif-stack: var(--font-cairo), system-ui, sans-serif;
+  --sans-stack: var(--font-cairo), system-ui, sans-serif;
+}
+
+html {
+  scroll-behavior: smooth;
+  /* Keeps room for the scrollbar, so the page doesn't jump sideways when a pop-up locks scrolling. */
+  scrollbar-gutter: stable;
+}
+
+body {
+  background: var(--color-ink);
+  color: var(--color-cream);
+  font-family: var(--sans-stack);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Arabic display text is set in heavy Cairo instead of condensed Anton. */
+:root[lang="ar"] .font-display {
+  font-weight: 800;
+  letter-spacing: 0;
+}
+
+/* Velvet grain over everything, like the packaging card. */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  pointer-events: none;
+  opacity: 0.07;
+  mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='180' height='180'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3' stitchTiles='stitch'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+}
+
+::selection {
+  background: var(--color-gold);
+  color: var(--color-ink);
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-gold-light);
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+
+@keyframes float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-10px);
+  }
+}
+
+@keyframes twinkle {
+  0%,
+  100% {
+    opacity: 0.25;
+    transform: scale(0.8);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/*
+ * Home page entrance. The seal glides in from the outer edge of the screen
+ * (the right in English, the left in Arabic, where the layout is mirrored)
+ * with a slight turn, as if it rolled to a stop.
+ */
+:root {
+  --glide-dir: 1;
+}
+[dir="rtl"] {
+  --glide-dir: -1;
+}
+
+@keyframes glide-in {
+  from {
+    opacity: 0;
+    transform: translateX(calc(var(--glide-dir) * min(65vw, 640px))) rotate(calc(var(--glide-dir) * 25deg));
+  }
+  55% {
+    opacity: 1;
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/*
+ * Each headline word rises into view from behind its own mask. The padding
+ * keeps tall letters and Arabic dots from being cut once the word is up, and
+ * the start position clears the padding so nothing peeks out before it rises.
+ */
+.word-mask {
+  display: inline-block;
+  overflow: hidden;
+  vertical-align: bottom;
+  padding-block: 0.15em;
+  margin-block: -0.15em;
+}
+:root[lang="ar"] .word-mask {
+  padding-block: 0.3em;
+  margin-block: -0.3em;
+}
+
+@keyframes rise-in {
+  from {
+    transform: translateY(calc(100% + 0.35em));
+  }
+  to {
+    transform: none;
+  }
+}
+
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* Pop-up windows. */
+dialog.modal[open] {
+  animation: modal-in 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+}
+dialog.modal[open]::backdrop {
+  animation: modal-backdrop 0.3s ease-out;
+}
+@keyframes modal-in {
+  from {
+    opacity: 0;
+    transform: translateY(14px) scale(0.98);
+  }
+}
+@keyframes modal-backdrop {
+  from {
+    opacity: 0;
+  }
+}
+
+/*
+ * Close-ups in the designer: a magnifying glass over the garment for fabrics,
+ * and for prints a small ring on the garment stretched out into a big circle,
+ * like the detail callouts in textbooks.
+ */
+.lens-glass {
+  background: #1c0e10;
+  box-shadow:
+    0 0 0 3px #e2c766,
+    0 0 0 5px #6b5113,
+    0 0 0 6px rgba(0, 0, 0, 0.6),
+    0 18px 36px rgba(0, 0, 0, 0.55),
+    inset 0 0 22px rgba(0, 0, 0, 0.55);
+}
+.lens-glass-small {
+  box-shadow:
+    0 0 0 2px #e2c766,
+    0 0 0 3px #6b5113,
+    0 8px 18px rgba(0, 0, 0, 0.5),
+    inset 0 0 12px rgba(0, 0, 0, 0.5);
+}
+.lens-glare {
+  position: absolute;
+  inset: 0;
+  border-radius: 9999px;
+  pointer-events: none;
+  background:
+    radial-gradient(circle at 30% 24%, rgba(255, 255, 255, 0.3), rgba(255, 255, 255, 0) 34%),
+    radial-gradient(circle at 50% 50%, rgba(0, 0, 0, 0) 62%, rgba(0, 0, 0, 0.35) 100%);
+}
+.lens-handle {
+  position: absolute;
+  /* Where the rim meets the 45° line, tucked in a little under the glass. */
+  left: 82%;
+  top: 82%;
+  width: 15%;
+  height: 58%;
+  border-radius: 9999px;
+  transform: translateX(-50%) rotate(-45deg);
+  transform-origin: 50% 0;
+  background: linear-gradient(90deg, #120808, #3b2620 45%, #120808);
+  box-shadow: 0 10px 22px rgba(0, 0, 0, 0.5);
+}
+.lens-handle::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto;
+  height: 22%;
+  border-radius: 30% 30% 20% 20%;
+  background: linear-gradient(90deg, #6b5113, #e2c766 50%, #6b5113);
+}
+[dir="rtl"] .lens-handle {
+  left: auto;
+  right: 82%;
+  transform: translateX(50%) rotate(45deg);
+}
+@keyframes closeup-pop {
+  from {
+    opacity: 0;
+    transform: scale(0.6) rotate(-8deg);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.closeup-pop {
+  animation: closeup-pop 0.45s cubic-bezier(0.22, 1, 0.36, 1) both;
+  transform-origin: center;
+}
+.callout-line {
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  animation: callout-draw 0.5s 0.15s ease-out forwards;
+}
+@keyframes callout-draw {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+  /* Entrance animations have delays; skip them entirely so everything is in place at once. */
+  .animate-glide-in,
+  .animate-rise-in,
+  .animate-fade-up {
+    animation: none !important;
+  }
+}
+
+/* "Print or save as PDF" on the order page: dark text on white, without the site's header, footer and buttons. */
+@media print {
+  body {
+    background: #fff;
+  }
+  body::before,
+  header,
+  footer,
+  .no-print {
+    display: none !important;
+  }
+  .print-plain,
+  .print-plain * {
+    color: #111 !important;
+    background: transparent !important;
+    border-color: #ccc !important;
+    box-shadow: none !important;
+  }
+}
+
+@layer components {
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-full px-6 py-3 text-sm font-semibold tracking-wide transition-colors duration-200;
+  }
+  /* Use as "btn btn-primary" / "btn btn-secondary". */
+  .btn-primary {
+    @apply bg-gold text-ink hover:bg-gold-light;
+  }
+  .btn-secondary {
+    @apply border border-gold/40 text-cream hover:border-gold hover:bg-gold/10;
+  }
+  .card {
+    @apply rounded-2xl border border-line bg-ink-2/70;
+  }
+  .eyebrow {
+    @apply font-serif text-xs font-bold tracking-[0.3em] text-gold uppercase;
+  }
+  .section {
+    @apply mx-auto w-full max-w-6xl px-4 sm:px-6;
+  }
+}

@@ -1,0 +1,18 @@
+node_modules/
+.next/
+out/
+build/
+coverage/
+*.tsbuildinfo
+next-env.d.ts
+.env
+.env.*
+!.env.example
+npm-debug.log*
+.DS_Store
+
+# Local database and uploads
+.data/
+
+# Downloaded tools (cloudflared for temporary share links)
+.tools/
