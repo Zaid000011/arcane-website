@@ -40,7 +40,7 @@ The link works only while both are running, and it changes every time `npm run s
 ## GitHub Pages copy
 
 The site also runs on GitHub Pages at https://zaid000011.github.io/arcane-website/ (Arabic under `/ar/`). GitHub Pages only serves files, so that copy has no server:
-- **Works there:** the home page, the 3D designer with its close-ups, prices, the cart and "send it to us".
+- **Works there:** the home page, the designer (garment photos and 3D) with its close-ups, prices, the cart and "send it to us".
 - **Goes to WhatsApp instead:** the cart's checkout becomes "Order on WhatsApp", and "send it to us" opens WhatsApp. Both go to the number in `src/config/site.ts`.
 - **Not there:** online checkout, group order links, order pages and the admin panel. Those need the full site with its server and database.
 
@@ -62,6 +62,8 @@ To update it after changing the site, or prices in the admin panel, run `npm run
 | 3D garment shapes (body, sleeves, hood, collars, pocket) | `src/lib/three/shape.ts` (sizes), `src/lib/three/garment.ts` (parts and fabric) |
 | Where prints sit on the garment (used by the 3D view and the workshop sheet) | `src/lib/design/placement.ts` |
 | How each print method looks in 3D (puff height, thread, shine) | `src/lib/three/print-layers.ts` |
+| Garment photos and where prints sit on them | Originals in `mockups-src/` (2048 px PNGs, kept out of git), points measured on them in `scripts/mockup-landmarks.json`. Then run `npm run mockups`: it writes `public/mockups/` and `src/lib/mockup/photo-data.ts` |
+| How each print method looks on the photos (soaks in, shine, raised edges, thread) | `LOOKS` in `src/lib/mockup/compose.ts` |
 
 ## How it's built
 
@@ -70,12 +72,17 @@ To update it after changing the site, or prices in the admin panel, run `npm run
 - English by default, Arabic with right-to-left layout through the header toggle (saved in a cookie)
 - The design in progress is saved in the browser, so it survives a refresh. Uploaded images are kept in the browser's IndexedDB (`src/lib/design/assets.ts`) until checkout uploads them
 - Artwork is stored in millimetres inside each print box (`src/lib/design/geometry.ts`), so print files can be produced at real size later
-- The designer shows the garment in 3D with three.js (`src/lib/three/`), loaded only on pages that need it. To look like a real garment in a product photo, it has:
+- The designer opens on real garment photos (`src/lib/mockup/`), with a Photo | 3D switch:
+  - Each garment and sleeve length has a front and a back photo of a white garment (made with AI image generation, hood raised on hoodie backs so names on the upper back show).
+  - The browser turns each photo into a map of light and shadow and lays the chosen color under it, so folds, seams and knit texture stay as photographed. Dark colors get deeper folds and a soft sheen, like black cotton in a real product photo.
+  - Prints, names, numbers and the neck label go where the 3D view and the workshop sheet put them (`placeOnPhoto` in `src/lib/mockup/photos.ts`), lit by the same light and bent slightly by the folds. Each method has its finish; drawstrings hang over prints under them, and sleeve prints follow the sleeve on the front photo.
+  - Pictures in the cart, checkout, orders, group pages, workshop sheet and product cards are drawn from the photos too, using smaller files when they're small (3D for sleeve views, or if a photo can't load).
+- The 3D view uses three.js (`src/lib/three/`), loaded only on pages that need it. To look like a real garment in a product photo, it has:
   - Folds where fabric gathers and hangs (above the waistband, from the armpits, bunched above the cuffs, creases at the elbows) in `src/lib/three/shape.ts`. Prints and names bend with them.
   - Soft shadows in the creases, sewn seams and dashed stitching (`src/lib/three/garment.ts`).
   - A real knit texture that changes with the fabric (jersey, piqué, felted wool), and a darker inside showing at the neck and openings.
   - Studio lights that turn with the view, so every side is lit.
-  - `npm run dev:preview` starts a live-reloading preview on port 3002 that can run next to the site. Each print method has its own finish: puff and 3D embroidery stand up from the fabric, embroidery shows thread, vinyl is glossy, special vinyl is metallic, DTG and sublimation soak into the knit, patches sit on top. Artwork is placed in a flat editor next to the 3D view, and the pictures in the cart, review and group pages are rendered from the same 3D scene
+  - `npm run dev:preview` starts a live-reloading preview on port 3002 that can run next to the site. Each print method has its own finish: puff and 3D embroidery stand up from the fabric, embroidery shows thread, vinyl is glossy, special vinyl is metallic, DTG and sublimation soak into the knit, patches sit on top. Artwork is placed in a flat editor next to the garment view
 - Group orders are saved on the server in SQLite through Node's built-in `node:sqlite` (`.data/arcane.db`, uploaded images in `.data/assets/`). Organizer and member keys are stored hashed and travel in the link's `#` part, so they never appear in server request logs
 - Checkout has no accounts. Each order gets a private link (`/track/CODE#key=…`) where the customer uploads the payment screenshot, approves the design proof and follows progress. The server prices everything again, and orders, screenshots and proofs are only readable with the order key. Design and plan: [docs/checkout-design.md](docs/checkout-design.md)
 - "Send it to us" requests (`src/server/requests.ts`): a customer's own design (PNG, JPG, WEBP, SVG, PDF, AI, EPS or PSD, up to 5 files of 20 MB), a color code or a custom size, saved with their WhatsApp number. File types are checked from the file's content, files are private to the team, and design files download instead of opening, so they can't run anything on the site.
@@ -101,5 +108,6 @@ To update it after changing the site, or prices in the admin panel, run `npm run
 | 6. Checkout, Paymob, InstaPay receipts, cash on delivery, emails, proof approval | Done: checkout, 50% deposit by InstaPay or wallet with screenshot upload, rest in cash on delivery, private order page with proof approval. Card payments need a Paymob account; emails come with the live site |
 | 7. Group orders: share link, QR code, members add their own name and size, organizer dashboard | Done (server tested; a full browser run-through is still to do) |
 | 8. Admin dashboard: catalog and price editor, orders, production sheet PDF | Done: orders, payments, proofs, statuses, team notes, workshop sheet (print or save as PDF), price editor with saved versions, team logins with roles. Still to add: promo codes, sales numbers, weekly capacity, clip-art library, print-ready files per area |
+| — Real garment photos: every garment in every color as a product photo, with each print method's finish; 3D stays one tap away | Done |
 | — Customer help: "send it to us" for own designs, colors and custom sizes; fabric magnifying glass; print close-ups; "Print types explained"; HEX color codes; plain-words fabric weights; no extra fee for 2XL and 3XL | Done |
 | 9. Polish, end-to-end tests, deployment | |

@@ -1,8 +1,8 @@
 "use client";
 
-import { Redo2, Rotate3d, Search, SearchX, Undo2 } from "lucide-react";
-import dynamic from "next/dynamic";
+import { Camera, Redo2, Rotate3d, Search, SearchX, Undo2 } from "lucide-react";
 import { useMemo, useState, type ReactNode } from "react";
+import { canShowPhoto, GarmentView, useViewMode, ViewModeToggle } from "@/components/garment/GarmentView";
 import type { CloseUpView } from "@/components/three/CloseUpOverlay";
 import { tr } from "@/lib/catalog";
 import type { Catalog } from "@/lib/catalog/types";
@@ -10,12 +10,7 @@ import { useDesignStore } from "@/lib/design/store";
 import type { DesignSelection } from "@/lib/pricing/types";
 import { useI18n } from "@/i18n/client";
 
-const Garment3D = dynamic(() => import("@/components/three/Garment3D"), {
-  ssr: false,
-  loading: () => <div className="h-full w-full animate-pulse bg-gold/5" aria-busy="true" />,
-});
-
-/** The rotatable 3D garment with front/back buttons, undo/redo and, on some steps, a close-up. */
+/** The garment (a real photo, or 3D to turn around) with front/back buttons, undo/redo and, on some steps, a close-up. */
 export function ViewerCard({
   catalog,
   design,
@@ -41,21 +36,26 @@ export function ViewerCard({
   const samples = useMemo(() => ({ name: sample?.name || t.sampleName, number: sample?.number || t.sampleNumber }), [sample?.name, sample?.number, t.sampleName, t.sampleNumber]);
   const product = catalog.products.find((p) => p.id === design.productId);
   const [hideCloseUp, setHideCloseUp] = useState(false);
+  const [mode, setMode] = useViewMode();
+  const photo = mode === "photo" && canShowPhoto(catalog, design);
 
   return (
     <div className="card relative overflow-hidden bg-[radial-gradient(circle_at_50%_40%,rgba(201,162,39,0.16),transparent_62%)]">
-      <div role="group" aria-label={t.viewLabel} className="absolute start-3 top-3 z-10 flex rounded-full border border-line bg-ink/80 p-1 text-sm">
-        {(["front", "back"] as const).map((v) => (
-          <button
-            key={v}
-            type="button"
-            aria-pressed={view === v}
-            onClick={() => setView(v)}
-            className="rounded-full px-4 py-1.5 text-cream-muted transition-colors aria-pressed:bg-gold aria-pressed:text-ink"
-          >
-            {v === "front" ? t.front : t.back}
-          </button>
-        ))}
+      <div className="absolute start-3 top-3 z-10 flex flex-col items-start gap-2">
+        <div role="group" aria-label={t.viewLabel} className="flex rounded-full border border-line bg-ink/80 p-1 text-sm">
+          {(["front", "back"] as const).map((v) => (
+            <button
+              key={v}
+              type="button"
+              aria-pressed={view === v}
+              onClick={() => setView(v)}
+              className="rounded-full px-4 py-1.5 text-cream-muted transition-colors aria-pressed:bg-gold aria-pressed:text-ink"
+            >
+              {v === "front" ? t.front : t.back}
+            </button>
+          ))}
+        </div>
+        {canShowPhoto(catalog, design) ? <ViewModeToggle mode={mode} onChange={setMode} /> : null}
       </div>
       <div className="absolute end-3 top-3 z-10 flex gap-1 rounded-full border border-line bg-ink/80 p-1">
         {closeUp ? (
@@ -70,20 +70,23 @@ export function ViewerCard({
           <Redo2 className="h-4 w-4 rtl:-scale-x-100" />
         </IconButton>
       </div>
-      <div className={compact ? "h-[34vh] cursor-grab active:cursor-grabbing lg:h-[64vh]" : "h-[52vh] cursor-grab active:cursor-grabbing lg:h-[64vh]"}>
-        <Garment3D
+      <div className={`${compact ? "h-[34vh]" : "h-[52vh]"} lg:h-[64vh] ${photo ? "" : "cursor-grab active:cursor-grabbing"}`}>
+        <GarmentView
+          mode={mode}
           catalog={catalog}
           design={design}
           view={view}
           samples={samples}
           placeholders={placeholders}
-          className="h-full w-full touch-none"
-          label={product ? `${tr(product.name, locale)} · 3D` : "3D"}
+          className={photo ? "h-full w-full" : "h-full w-full touch-none"}
+          label={`${product ? tr(product.name, locale) : ""} · ${photo ? t.photoMode : t.mode3d}`}
           closeUp={hideCloseUp ? null : closeUp}
         />
       </div>
-      <p className="pointer-events-none absolute inset-x-0 bottom-2 flex items-center justify-center gap-1.5 text-xs text-cream-muted">
-        <Rotate3d className="h-3.5 w-3.5" aria-hidden /> {t.dragToRotate}
+      <p className={`pointer-events-none absolute inset-x-0 bottom-2 justify-center px-3 ${compact ? "hidden lg:flex" : "flex"}`}>
+        <span className="inline-flex items-center gap-1.5 rounded-full bg-ink/70 px-3 py-1 text-center text-xs text-cream-muted">
+          {photo ? <Camera className="h-3.5 w-3.5 shrink-0" aria-hidden /> : <Rotate3d className="h-3.5 w-3.5 shrink-0" aria-hidden />} {photo ? t.photoHint : t.dragToRotate}
+        </span>
       </p>
     </div>
   );

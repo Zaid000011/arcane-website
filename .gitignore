@@ -20,3 +20,6 @@ npm-debug.log*
 
 # The GitHub Pages copy (npm run pages)
 .static-build/
+
+# Original 2048px garment photos (npm run mockups turns them into public/mockups)
+mockups-src/

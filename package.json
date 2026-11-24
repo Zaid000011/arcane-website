@@ -12,7 +12,8 @@
     "typecheck": "tsc --noEmit",
     "pages": "node scripts/github-pages.mjs",
     "pages:publish": "node scripts/github-pages.mjs --publish",
-    "dev:preview": "node scripts/dev-preview.mjs"
+    "dev:preview": "node scripts/dev-preview.mjs",
+    "mockups": "node scripts/mockup-photos.mjs"
   },
   "dependencies": {
     "clsx": "^2.1.1",

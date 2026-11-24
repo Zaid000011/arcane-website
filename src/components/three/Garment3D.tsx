@@ -1,11 +1,33 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import type { Catalog } from "@/lib/catalog/types";
+import { useEffect, useMemo, useRef, useState } from "react";
+import type { Catalog, SizeTier } from "@/lib/catalog/types";
 import type { DesignSelection } from "@/lib/pricing/types";
-import type { PrintSamples } from "@/lib/three/print-layers";
+import { areaAnchor, type PrintSamples } from "@/lib/three/print-layers";
+import type { Vec3 } from "@/lib/three/shape";
 import { GarmentStage, type StageView } from "@/lib/three/stage";
-import { CloseUpOverlay, type CloseUpView } from "./CloseUpOverlay";
+import { CloseUpOverlay, type CloseUpTarget, type CloseUpView } from "./CloseUpOverlay";
+
+/** Lets a close-up follow a print area on the turning 3D garment. */
+function stageTarget(stage: GarmentStage, catalog: Catalog): CloseUpTarget {
+  let build = stage.garment;
+  const anchors = new Map<string, { p: Vec3; n: Vec3 } | null>();
+  return {
+    element: () => stage.renderer.domElement,
+    locate(areaId: string, tier: SizeTier) {
+      if (stage.garment !== build) {
+        build = stage.garment;
+        anchors.clear();
+      }
+      const key = `${areaId}|${tier}`;
+      if (!anchors.has(key)) anchors.set(key, build ? areaAnchor(build, catalog, areaId, tier) : null);
+      const a = anchors.get(key);
+      return a ? stage.project(a.p, a.n) : null;
+    },
+    subscribe: (fn) => stage.onRender(fn),
+    refresh: () => stage.requestRender(),
+  };
+}
 
 /** Live, rotatable 3D garment. Loaded only in the browser (WebGL). */
 export default function Garment3D({
@@ -74,10 +96,12 @@ export default function Garment3D({
     stageRef.current?.setView(view);
   }, [view]);
 
+  const target = useMemo(() => (stage ? stageTarget(stage, catalog) : null), [stage, catalog]);
+
   return (
     <div className={`relative ${className ?? ""}`}>
       <canvas ref={canvasRef} className="block h-full w-full touch-none" role="img" aria-label={label} />
-      {closeUp && stage ? <CloseUpOverlay stage={stage} view={closeUp} catalog={catalog} design={design} /> : null}
+      {closeUp && target ? <CloseUpOverlay target={target} view={closeUp} catalog={catalog} design={design} /> : null}
     </div>
   );
 }

@@ -1,9 +1,9 @@
 "use client";
 
-import { CalendarClock, Check, Copy, Minus, Plus, Ruler, Share2, Users } from "lucide-react";
-import dynamic from "next/dynamic";
+import { Camera, CalendarClock, Check, Copy, Minus, Plus, Rotate3d, Ruler, Share2, Users } from "lucide-react";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Star } from "@/components/brand/Star";
+import { canShowPhoto, GarmentView, useViewMode, ViewModeToggle } from "@/components/garment/GarmentView";
 import type { Catalog } from "@/lib/catalog/types";
 import { areaSide } from "@/lib/design/areas";
 import type { StageView } from "@/lib/three/stage";
@@ -13,11 +13,6 @@ import type { GroupMember, PublicGroup } from "@/lib/group/types";
 import { formatDate } from "@/lib/order/dates";
 import { useI18n } from "@/i18n/client";
 import { fmt } from "@/i18n/format";
-
-const Garment3D = dynamic(() => import("@/components/three/Garment3D"), {
-  ssr: false,
-  loading: () => <div className="h-full w-full animate-pulse bg-gold/5" aria-busy="true" />,
-});
 
 type Mode = "loading" | "form" | "joined" | "editing";
 const emptyForm = { name: "", phone: "", number: "", sizeId: "", quantity: 1 };
@@ -300,7 +295,7 @@ export function GroupJoin({ group, catalog }: { group: PublicGroup; catalog: Cat
   );
 }
 
-/** Rotatable 3D preview with this person's name and number on it. */
+/** Preview (photo or 3D) with this person's name and number on it. */
 function JoinViewer({ catalog, group, name, number }: { catalog: Catalog; group: PublicGroup; name?: string; number?: string }) {
   const { dict } = useI18n();
   const t = dict.designer;
@@ -308,19 +303,37 @@ function JoinViewer({ catalog, group, name, number }: { catalog: Catalog; group:
   const onBack = [p.nameStyle?.areaId, p.numberStyle?.areaId].some((id) => id && areaSide(id) === "back");
   const [view, setView] = useState<StageView>(onBack ? "back" : "front");
   const samples = useMemo(() => ({ name: name || t.sampleName, number: number || t.sampleNumber }), [name, number, t.sampleName, t.sampleNumber]);
+  const [mode, setMode] = useViewMode();
+  const photos = canShowPhoto(catalog, group.design);
+  const photo = mode === "photo" && photos;
   return (
     <div className="card relative overflow-hidden bg-[radial-gradient(circle_at_50%_40%,rgba(201,162,39,0.16),transparent_62%)]">
-      <div role="group" aria-label={t.viewLabel} className="absolute start-3 top-3 z-10 flex rounded-full border border-line bg-ink/80 p-1 text-sm">
-        {(["front", "back"] as const).map((v) => (
-          <button key={v} type="button" aria-pressed={view === v} onClick={() => setView(v)} className="rounded-full px-4 py-1.5 text-cream-muted aria-pressed:bg-gold aria-pressed:text-ink">
-            {v === "front" ? t.front : t.back}
-          </button>
-        ))}
+      <div className="absolute start-3 top-3 z-10 flex flex-col items-start gap-2">
+        <div role="group" aria-label={t.viewLabel} className="flex rounded-full border border-line bg-ink/80 p-1 text-sm">
+          {(["front", "back"] as const).map((v) => (
+            <button key={v} type="button" aria-pressed={view === v} onClick={() => setView(v)} className="rounded-full px-4 py-1.5 text-cream-muted aria-pressed:bg-gold aria-pressed:text-ink">
+              {v === "front" ? t.front : t.back}
+            </button>
+          ))}
+        </div>
+        {photos ? <ViewModeToggle mode={mode} onChange={setMode} /> : null}
       </div>
-      <div className="h-[46vh] cursor-grab lg:h-[60vh]">
-        <Garment3D catalog={catalog} design={group.design} view={view} samples={samples} className="h-full w-full touch-none" label={`${group.name} · 3D`} />
+      <div className={`h-[46vh] lg:h-[60vh] ${photo ? "" : "cursor-grab"}`}>
+        <GarmentView
+          mode={mode}
+          catalog={catalog}
+          design={group.design}
+          view={view}
+          samples={samples}
+          className={photo ? "h-full w-full" : "h-full w-full touch-none"}
+          label={`${group.name} · ${photo ? t.photoMode : t.mode3d}`}
+        />
       </div>
-      <p className="pointer-events-none absolute inset-x-0 bottom-2 text-center text-xs text-cream-muted">{t.dragToRotate}</p>
+      <p className="pointer-events-none absolute inset-x-0 bottom-2 flex justify-center px-3">
+        <span className="inline-flex items-center gap-1.5 rounded-full bg-ink/70 px-3 py-1 text-center text-xs text-cream-muted">
+          {photo ? <Camera className="h-3.5 w-3.5 shrink-0" aria-hidden /> : <Rotate3d className="h-3.5 w-3.5 shrink-0" aria-hidden />} {photo ? t.photoHint : t.dragToRotate}
+        </span>
+      </p>
     </div>
   );
 }
