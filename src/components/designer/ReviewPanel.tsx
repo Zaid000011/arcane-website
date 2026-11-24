@@ -10,6 +10,7 @@ import { useDesignStore } from "@/lib/design/store";
 import { addWorkingDays, formatDate } from "@/lib/order/dates";
 import { effectiveSizes } from "@/lib/order/roster";
 import type { DesignSelection, Quote } from "@/lib/pricing/types";
+import { STATIC_SITE } from "@/lib/site-mode";
 import { useI18n } from "@/i18n/client";
 import { fmt } from "@/i18n/format";
 import { FieldLabel } from "./controls";
@@ -120,9 +121,12 @@ export function ReviewPanel({
             <ShoppingBag className="h-4 w-4" aria-hidden /> {t.addToCart}
           </button>
         )}
-        <button type="button" aria-expanded={showGroup} onClick={() => setShowGroup((v) => !v)} className="btn btn-secondary">
-          <Users className="h-4 w-4" aria-hidden /> {dict.group.startButton}
-        </button>
+        {/* Group links need the server, so the GitHub Pages copy leaves them out. */}
+        {STATIC_SITE ? null : (
+          <button type="button" aria-expanded={showGroup} onClick={() => setShowGroup((v) => !v)} className="btn btn-secondary">
+            <Users className="h-4 w-4" aria-hidden /> {dict.group.startButton}
+          </button>
+        )}
       </div>
 
       {showGroup ? <StartGroupForm catalog={catalog} design={design} deliverySpeedId={order.deliverySpeedId} designBlocked={designBlocked} /> : null}

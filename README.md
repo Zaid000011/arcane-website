@@ -1,6 +1,8 @@
 # Arcane Studios website
 
 Custom apparel site for seniors, clubs and uniforms: a live designer, group orders and checkout.
+
+**See it online:** https://zaid000011.github.io/arcane-website/ (Arabic: https://zaid000011.github.io/arcane-website/ar/), the GitHub Pages copy described below.
 The full product spec is in [docs/PROJECT_SPEC.md](docs/PROJECT_SPEC.md).
 
 ## Run it
@@ -34,6 +36,15 @@ npm run share                          # terminal 2: prints a https://….tryclo
 
 The link works only while both are running, and it changes every time `npm run share` starts.
 `npm run share` uses Cloudflare's free quick tunnel program in `.tools/cloudflared/`, the official 2026.11.2 release checked against its published SHA-256.
+
+## GitHub Pages copy
+
+The site also runs on GitHub Pages at https://zaid000011.github.io/arcane-website/ (Arabic under `/ar/`). GitHub Pages only serves files, so that copy has no server:
+- **Works there:** the home page, the 3D designer with its close-ups, prices, the cart and "send it to us".
+- **Goes to WhatsApp instead:** the cart's checkout becomes "Order on WhatsApp", and "send it to us" opens WhatsApp. Both go to the number in `src/config/site.ts`.
+- **Not there:** online checkout, group order links, order pages and the admin panel. Those need the full site with its server and database.
+
+To update it after changing the site, or prices in the admin panel, run `npm run pages:publish`. It builds both languages and uploads them to the `gh-pages` branch, and the link updates within a minute or two. `npm run pages` only builds it, into `.static-build/site`.
 
 ## Where to change things
 

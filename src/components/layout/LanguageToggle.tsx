@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useTransition } from "react";
 import { dirOf, LOCALE_COOKIE } from "@/i18n/config";
 import { useI18n } from "@/i18n/client";
+import { STATIC_ROOT, STATIC_SITE } from "@/lib/site-mode";
 
 export function LanguageToggle({ className = "" }: { className?: string }) {
   const { locale, dict } = useI18n();
@@ -13,6 +14,14 @@ export function LanguageToggle({ className = "" }: { className?: string }) {
   const next = locale === "en" ? "ar" : "en";
 
   function toggle() {
+    if (STATIC_SITE) {
+      // On GitHub Pages each language is its own copy: English at the root, Arabic under /ar.
+      const here = locale === "ar" ? `${STATIC_ROOT}/ar` : STATIC_ROOT;
+      const rest = window.location.pathname.startsWith(here) ? window.location.pathname.slice(here.length) : "/";
+      const there = next === "ar" ? `${STATIC_ROOT}/ar` : STATIC_ROOT;
+      window.location.href = `${there}${rest || "/"}${window.location.search}${window.location.hash}`;
+      return;
+    }
     document.cookie = `${LOCALE_COOKIE}=${next}; path=/; max-age=31536000; samesite=lax`;
     document.documentElement.lang = next;
     document.documentElement.dir = dirOf(next);

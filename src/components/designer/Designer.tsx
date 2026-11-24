@@ -19,6 +19,7 @@ import { quote as priceQuote } from "@/lib/pricing/engine";
 import type { AnyIssue } from "@/lib/pricing/issues";
 import type { DesignSelection } from "@/lib/pricing/types";
 import type { RequestKind } from "@/lib/requests/types";
+import { queryParam, STATIC_SITE } from "@/lib/site-mode";
 import { SendDialog } from "@/components/send/SendDialog";
 import type { CloseUpView } from "@/components/three/CloseUpOverlay";
 import { useI18n } from "@/i18n/client";
@@ -56,10 +57,11 @@ export function Designer({ catalog, initialProductId }: { catalog: Catalog; init
   // Load the design saved on this device after the first render (avoids a server/client mismatch).
   useEffect(() => {
     void Promise.resolve(useDesignStore.persist.rehydrate()).then(() => {
+      const wanted = initialProductId ?? (STATIC_SITE ? queryParam("product") : undefined);
       const saved = useDesignStore.getState().design;
-      let next = saved ? normalizeDesign(catalog, saved) : defaultDesign(catalog, initialProductId);
-      if (initialProductId && next.productId !== initialProductId && catalog.products.some((p) => p.id === initialProductId && p.enabled)) {
-        next = switchProduct(catalog, next, initialProductId);
+      let next = saved ? normalizeDesign(catalog, saved) : defaultDesign(catalog, wanted);
+      if (wanted && next.productId !== wanted && catalog.products.some((p) => p.id === wanted && p.enabled)) {
+        next = switchProduct(catalog, next, wanted);
       }
       useDesignStore.getState().setDesign(next);
     });

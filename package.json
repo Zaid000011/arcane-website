@@ -9,7 +9,9 @@
     "start:local": "next start -H 127.0.0.1",
     "share": ".tools\\cloudflared\\cloudflared.exe tunnel --no-autoupdate --url http://localhost:3000",
     "test": "vitest run",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "pages": "node scripts/github-pages.mjs",
+    "pages:publish": "node scripts/github-pages.mjs --publish"
   },
   "dependencies": {
     "clsx": "^2.1.1",

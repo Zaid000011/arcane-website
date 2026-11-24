@@ -2,6 +2,7 @@ import { MessageCircle, Send, Shirt } from "lucide-react";
 import type { Metadata } from "next";
 import { SendPageForm } from "@/components/send/SendPageForm";
 import { REQUEST_KINDS, type RequestKind } from "@/lib/requests/types";
+import { STATIC_SITE } from "@/lib/site-mode";
 import { getLiveCatalog } from "@/server/catalog-store";
 import { getDictionary, getLocale } from "@/i18n/server";
 
@@ -15,7 +16,8 @@ type Props = { searchParams: Promise<{ type?: string; product?: string }> };
 export default async function SendPage({ searchParams }: Props) {
   const locale = await getLocale();
   const t = getDictionary(locale).send;
-  const sp = await searchParams;
+  // The GitHub Pages copy is built ahead of time, so the form reads ?type= and ?product= itself.
+  const sp: { type?: string; product?: string } = STATIC_SITE ? {} : await searchParams;
   const kind: RequestKind = REQUEST_KINDS.includes(sp.type as RequestKind) ? (sp.type as RequestKind) : "design";
   const catalog = getLiveCatalog();
   const icons = [Send, MessageCircle, Shirt];

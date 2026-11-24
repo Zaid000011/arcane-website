@@ -16,3 +16,6 @@ npm-debug.log*
 
 # Downloaded tools (cloudflared for temporary share links)
 .tools/
+
+# The GitHub Pages copy (npm run pages)
+.static-build/

@@ -8,6 +8,9 @@ import { tr } from "@/lib/catalog";
 import type { Catalog } from "@/lib/catalog/types";
 import { closestColor, normalizeHex } from "@/lib/color-match";
 import { normalizePhone } from "@/lib/group/rules";
+import { STATIC_SITE } from "@/lib/site-mode";
+import type { CustomRequestInput } from "@/lib/validation";
+import { requestMessage } from "@/lib/whatsapp-order";
 import {
   looksLikeRequestFile,
   MAX_REQUEST_FILE_BYTES,
@@ -68,6 +71,8 @@ export function SendRequestForm({ catalog, kind, onKindChange, productId: initia
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [sent, setSent] = useState<string | null>(null);
+  // On GitHub Pages there's no server: the request opens WhatsApp instead.
+  const [waLink, setWaLink] = useState<string | null>(null);
 
   // Remember the name and number from last time on this device.
   useEffect(() => {
@@ -99,8 +104,8 @@ export function SendRequestForm({ catalog, kind, onKindChange, productId: initia
   };
   const problems = {
     name: name.trim().length < 2,
-    phone: !normalizePhone(phone),
-    files: kind === "design" && designFiles.length === 0,
+    phone: !STATIC_SITE && !normalizePhone(phone),
+    files: !STATIC_SITE && kind === "design" && designFiles.length === 0,
     color: kind === "color" && !color,
     quantity: quantity.trim() !== "" && !(Number.isInteger(toNumber(quantity)) && toNumber(quantity) >= 1 && toNumber(quantity) <= 100_000),
     measures: kind === "size" && (Object.keys(RANGES) as Measure[]).some(measureBad),
@@ -143,6 +148,18 @@ export function SendRequestForm({ catalog, kind, onKindChange, productId: initia
       size: kind === "size" ? { chest: num("chest"), length: num("length"), sleeve: num("sleeve"), height: num("height"), weight: num("weight"), count: num("count") } : undefined,
       message: message.trim(),
     };
+    if (STATIC_SITE) {
+      const link = whatsappTo(siteConfig.whatsappNumber, requestMessage(catalog, data as unknown as CustomRequestInput, locale, dict));
+      setWaLink(link);
+      window.open(link, "_blank", "noopener,noreferrer");
+      try {
+        localStorage.setItem(CONTACT_KEY, JSON.stringify({ name: name.trim(), phone }));
+      } catch {
+        // Not saved on this device; nothing else depends on it.
+      }
+      onSent?.();
+      return;
+    }
     const form = new FormData();
     form.append("data", JSON.stringify(data));
     for (const f of files) form.append("files", f, f.name);
@@ -166,6 +183,7 @@ export function SendRequestForm({ catalog, kind, onKindChange, productId: initia
 
   const reset = () => {
     setSent(null);
+    setWaLink(null);
     setTouched(false);
     setDesignFiles([]);
     setPhotos([]);
@@ -193,6 +211,29 @@ export function SendRequestForm({ catalog, kind, onKindChange, productId: initia
             <a href={whatsappTo(siteConfig.whatsappNumber, fmt(t.whatsappMessage, { code: ref }))} target="_blank" rel="noopener noreferrer" className="btn btn-secondary">
               <MessageCircle className="h-4 w-4" aria-hidden /> {t.whatsappNow}
             </a>
+          ) : null}
+          <button type="button" onClick={reset} className="btn btn-secondary">
+            {t.sendAnother}
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (waLink) {
+    return (
+      <div role="status" className="scroll-mt-24 py-6 text-center" ref={(el) => el?.scrollIntoView({ block: "nearest", behavior: "smooth" })}>
+        <MessageCircle className="mx-auto h-14 w-14 text-gold" aria-hidden />
+        <h3 className="mt-3 font-display text-3xl tracking-wide uppercase">{t.whatsappOpenedTitle}</h3>
+        <p className="mx-auto mt-2 max-w-md text-cream-muted">{t.whatsappOpenedBody}</p>
+        <div className="mt-6 flex flex-wrap justify-center gap-3">
+          <a href={waLink} target="_blank" rel="noopener noreferrer" className="btn btn-primary">
+            <MessageCircle className="h-4 w-4" aria-hidden /> {t.whatsappSubmit}
+          </a>
+          {onDone ? (
+            <button type="button" onClick={onDone} className="btn btn-secondary">
+              {t.keepDesigning}
+            </button>
           ) : null}
           <button type="button" onClick={reset} className="btn btn-secondary">
             {t.sendAnother}
@@ -234,7 +275,8 @@ export function SendRequestForm({ catalog, kind, onKindChange, productId: initia
 
       <p className="text-sm leading-relaxed text-cream-muted">{t.intros[kind]}</p>
 
-      {kind === "design" ? (
+      {kind === "design" && STATIC_SITE ? <WhatsappNote>{t.filesInWhatsapp}</WhatsappNote> : null}
+      {kind === "design" && !STATIC_SITE ? (
         <FilePicker
           label={t.files}
           hint={fmt(t.filesHint, { max: MAX_REQUEST_FILES, mb: MAX_REQUEST_FILE_MB })}
@@ -282,7 +324,9 @@ export function SendRequestForm({ catalog, kind, onKindChange, productId: initia
           <Field label={t.colorName}>
             <input value={colorName} onChange={(e) => setColorName(e.target.value)} maxLength={80} dir="auto" placeholder={t.colorNamePlaceholder} className={fieldClass(false)} />
           </Field>
-          <FilePicker
+          {STATIC_SITE ? <WhatsappNote>{t.photoInWhatsapp}</WhatsappNote> : null}
+          {STATIC_SITE ? null : (
+            <FilePicker
             label={t.photos}
             hint={t.photosHint}
             accept={REQUEST_PHOTO_ACCEPT}
@@ -292,6 +336,7 @@ export function SendRequestForm({ catalog, kind, onKindChange, productId: initia
             onRemove={(i) => setPhotos(photos.filter((_, j) => j !== i))}
             error={fileNote}
           />
+          )}
         </>
       ) : null}
 
@@ -337,9 +382,12 @@ export function SendRequestForm({ catalog, kind, onKindChange, productId: initia
         <Field label={t.name} error={show("name") ? t.required : null}>
           <input value={name} onChange={(e) => setName(e.target.value)} maxLength={60} dir="auto" autoComplete="name" className={fieldClass(Boolean(show("name")))} />
         </Field>
-        <Field label={t.phone} hint={t.phoneHint} error={show("phone") ? t.phoneInvalid : null}>
-          <input value={phone} onChange={(e) => setPhone(e.target.value)} inputMode="tel" autoComplete="tel" dir="ltr" placeholder={t.phonePlaceholder} className={fieldClass(Boolean(show("phone")))} />
-        </Field>
+        {/* On WhatsApp we already see their number. */}
+        {STATIC_SITE ? null : (
+          <Field label={t.phone} hint={t.phoneHint} error={show("phone") ? t.phoneInvalid : null}>
+            <input value={phone} onChange={(e) => setPhone(e.target.value)} inputMode="tel" autoComplete="tel" dir="ltr" placeholder={t.phonePlaceholder} className={fieldClass(Boolean(show("phone")))} />
+          </Field>
+        )}
       </div>
 
       <Field label={t.message}>
@@ -353,9 +401,19 @@ export function SendRequestForm({ catalog, kind, onKindChange, productId: initia
       ) : null}
 
       <button type="submit" disabled={busy} className="btn btn-primary w-full py-3.5 text-base disabled:opacity-60">
-        {busy ? t.sending : t.submit}
+        {STATIC_SITE ? <MessageCircle className="h-4 w-4" aria-hidden /> : null}
+        {busy ? t.sending : STATIC_SITE ? t.whatsappSubmit : t.submit}
       </button>
     </form>
+  );
+}
+
+function WhatsappNote({ children }: { children: ReactNode }) {
+  return (
+    <p className="flex items-start gap-2 rounded-xl border border-dashed border-gold/40 bg-ink/50 px-3 py-3 text-sm text-cream-muted">
+      <MessageCircle className="mt-0.5 h-4 w-4 shrink-0 text-gold" aria-hidden />
+      {children}
+    </p>
   );
 }
 

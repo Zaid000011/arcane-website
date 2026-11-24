@@ -1,11 +1,13 @@
 "use client";
 
-import { AlertTriangle, Copy, Pencil, ShoppingBag, Trash2 } from "lucide-react";
+import { AlertTriangle, Copy, MessageCircle, Pencil, ShoppingBag, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { MyOrdersList } from "@/components/order/TrackView";
 import { GarmentImage } from "@/components/three/GarmentImage";
+import { siteConfig } from "@/config/site";
+import { whatsappTo } from "@/lib/api-client";
 import { useCartReady, useCartStore, type CartItem } from "@/lib/cart/store";
 import { tr } from "@/lib/catalog";
 import type { Catalog } from "@/lib/catalog/types";
@@ -16,6 +18,8 @@ import { addWorkingDays, formatDate } from "@/lib/order/dates";
 import { myOrders, type MyOrder } from "@/lib/order/my-orders";
 import { effectiveSizes } from "@/lib/order/roster";
 import type { quote as priceQuote } from "@/lib/pricing/engine";
+import { STATIC_SITE } from "@/lib/site-mode";
+import { orderMessage } from "@/lib/whatsapp-order";
 import { useI18n } from "@/i18n/client";
 import { fmt, formatMoney } from "@/i18n/format";
 
@@ -41,9 +45,11 @@ export function CartView({ catalog }: { catalog: Catalog }) {
             {t.emptyCta}
           </Link>
         </div>
-        <div className="mx-auto max-w-2xl">
-          <MyOrdersList orders={orders} />
-        </div>
+        {STATIC_SITE ? null : (
+          <div className="mx-auto max-w-2xl">
+            <MyOrdersList orders={orders} />
+          </div>
+        )}
       </div>
     );
   }
@@ -84,11 +90,24 @@ export function CartView({ catalog }: { catalog: Catalog }) {
               <dd className="font-display text-2xl tracking-wide text-gold">{formatMoney(piecesTotal, locale)}</dd>
             </div>
           </dl>
-          <p className="text-xs text-cream-muted">{t.shippingNote}</p>
+          {STATIC_SITE ? null : <p className="text-xs text-cream-muted">{t.shippingNote}</p>}
           {anyBlocking ? (
             <p className="flex items-center gap-2 rounded-lg bg-arcane/60 px-3 py-2 text-sm text-cream">
               <AlertTriangle className="h-4 w-4 shrink-0" aria-hidden /> {t.checkoutBlocked}
             </p>
+          ) : STATIC_SITE ? (
+            // The GitHub Pages copy has no online checkout: the order goes to WhatsApp instead.
+            <>
+              <a
+                href={whatsappTo(siteConfig.whatsappNumber, orderMessage(catalog, items, locale, dict))}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="btn btn-primary w-full py-3.5 text-base"
+              >
+                <MessageCircle className="h-4 w-4" aria-hidden /> {t.orderWhatsapp}
+              </a>
+              <p className="text-xs leading-relaxed text-cream-muted">{t.orderWhatsappHint}</p>
+            </>
           ) : (
             <Link href="/checkout" className="btn btn-primary w-full py-3.5 text-base">
               {t.checkout}
@@ -99,7 +118,7 @@ export function CartView({ catalog }: { catalog: Catalog }) {
           </Link>
         </aside>
       </div>
-      <MyOrdersList orders={orders} />
+      {STATIC_SITE ? null : <MyOrdersList orders={orders} />}
     </div>
   );
 }
