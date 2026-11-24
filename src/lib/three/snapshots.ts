@@ -38,7 +38,8 @@ export function renderGarmentImage(
     const s = getStage();
     const product = catalog.products.find((p) => p.id === design.productId) ?? catalog.products[0]!;
     const color = catalog.colors.find((c) => c.id === design.bodyColorId)?.hex ?? "#151515";
-    s.setGarment(product.mockup, design.sleeve, design.fitId, color);
+    const fabric = product.fabrics.find((f) => f.id === design.fabricId) ?? product.fabrics[0];
+    s.setGarment(product.mockup, design.sleeve, design.fitId, color, { id: fabric?.id ?? "cotton", kind: fabric?.kind ?? "cotton" });
     s.resize(width, height);
     s.setView(view, false);
     await updatePrintLayers(s, catalog, design, { samples });

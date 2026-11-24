@@ -2,7 +2,7 @@ import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
 import type { MockupId, Sleeve } from "@/lib/catalog/types";
-import { buildGarment, disposeGroup, setFabricColor, type GarmentBuild } from "./garment";
+import { applyFinish, buildGarment, disposeGroup, fabricFinish, setFabricColor, setThreadColor, type GarmentBuild } from "./garment";
 import type { Vec3 } from "./shape";
 import { groundShadow } from "./textures";
 
@@ -23,6 +23,7 @@ export class GarmentStage {
   controls: OrbitControls | null = null;
   garment: GarmentBuild | null = null;
   private garmentKey = "";
+  private finishKey = "";
   private ground: THREE.Mesh;
   private frame = 0;
   private tween: { from: number; to: number; start: number } | null = null;
@@ -31,6 +32,8 @@ export class GarmentStage {
   private polar = Math.PI / 2 - 0.06;
   private azimuth = 0;
   private disposed = false;
+  /** The studio lights turn with the camera, so whichever side you look at is lit like a product photo. */
+  private rig = new THREE.Group();
   private renderListeners = new Set<() => void>();
 
   constructor(canvas: HTMLCanvasElement, opts: { interactive: boolean; preserveDrawingBuffer?: boolean }) {
@@ -46,13 +49,13 @@ export class GarmentStage {
 
     const pmrem = new THREE.PMREMGenerator(r);
     this.scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
-    this.scene.environmentIntensity = 0.4;
+    this.scene.environmentIntensity = 0.28;
     pmrem.dispose();
 
-    const key = new THREE.DirectionalLight(0xffffff, 1.45);
-    key.position.set(70, 80, 130);
+    const key = new THREE.DirectionalLight(0xfff6ec, 1.75);
+    key.position.set(95, 95, 110);
     key.castShadow = true;
-    key.shadow.mapSize.set(1024, 1024);
+    key.shadow.mapSize.set(2048, 2048);
     key.shadow.camera.left = -80;
     key.shadow.camera.right = 80;
     key.shadow.camera.top = 60;
@@ -68,7 +71,8 @@ export class GarmentStage {
     rim.position.set(0, 60, -140);
     const back = new THREE.DirectionalLight(0xffffff, 0.45);
     back.position.set(-60, 40, -110);
-    this.scene.add(key, fill, rim, back, new THREE.HemisphereLight(0xffffff, 0x2a1416, 0.2));
+    this.rig.add(key, fill, rim, back);
+    this.scene.add(this.rig, new THREE.HemisphereLight(0xffffff, 0x2a1416, 0.2));
 
     this.ground = new THREE.Mesh(new THREE.PlaneGeometry(130, 46), new THREE.MeshBasicMaterial({ map: groundShadow(), transparent: true, depthWrite: false }));
     this.ground.rotation.x = -Math.PI / 2;
@@ -89,12 +93,19 @@ export class GarmentStage {
     }
   }
 
-  /** Builds the garment (or just recolors it when only the color changed). */
-  setGarment(mockup: MockupId, sleeve: Sleeve, fitId: string, color: string) {
+  /**
+   * Builds the garment (or, when only the color or fabric changed, just
+   * recolors it and swaps the knit texture).
+   */
+  setGarment(mockup: MockupId, sleeve: Sleeve, fitId: string, color: string, fabric: { id: string; kind: string } = { id: "cotton", kind: "cotton" }) {
     const key = `${mockup}|${sleeve}|${fitId}`;
+    const finishKey = `${fabric.id}|${fabric.kind}`;
     if (this.garment && key === this.garmentKey) {
       setFabricColor(this.garment.fabric, color);
       setFabricColor(this.garment.rib, color);
+      setThreadColor(this.garment.stitch, color);
+      if (finishKey !== this.finishKey) applyFinish(this.garment.fabric, fabricFinish(fabric.id, fabric.kind));
+      this.finishKey = finishKey;
       this.requestRender();
       return;
     }
@@ -102,8 +113,9 @@ export class GarmentStage {
       this.scene.remove(this.garment.group);
       disposeGroup(this.garment.group);
     }
-    this.garment = buildGarment(mockup, sleeve, fitId, color);
+    this.garment = buildGarment(mockup, sleeve, fitId, color, fabricFinish(fabric.id, fabric.kind));
     this.garmentKey = key;
+    this.finishKey = finishKey;
     this.scene.add(this.garment.group);
     this.fit();
   }
@@ -184,10 +196,17 @@ export class GarmentStage {
       again = true;
     }
     if (this.controls && this.controls.update()) again = true;
+    this.followCamera();
     this.renderer.render(this.scene, this.camera);
     for (const fn of this.renderListeners) fn();
     if (again) this.requestRender();
   };
+
+  private followCamera() {
+    const target = this.controls?.target ?? this.target;
+    this.rig.rotation.y = Math.atan2(this.camera.position.x - target.x, this.camera.position.z - target.z);
+    this.rig.updateMatrixWorld(true);
+  }
 
   /** Runs after every frame (turning, zooming, new prints). Returns a function that stops it. */
   onRender(fn: () => void): () => void {
@@ -206,6 +225,7 @@ export class GarmentStage {
 
   /** Renders immediately and returns a PNG (used for pictures in the cart and review). */
   snapshot(): string {
+    this.followCamera();
     this.renderer.render(this.scene, this.camera);
     return this.renderer.domElement.toDataURL("image/png");
   }

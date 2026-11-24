@@ -11,7 +11,8 @@
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "pages": "node scripts/github-pages.mjs",
-    "pages:publish": "node scripts/github-pages.mjs --publish"
+    "pages:publish": "node scripts/github-pages.mjs --publish",
+    "dev:preview": "node scripts/dev-preview.mjs"
   },
   "dependencies": {
     "clsx": "^2.1.1",

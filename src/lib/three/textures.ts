@@ -117,6 +117,134 @@ export function weaveNormal(): THREE.Texture {
   return normalTexture("weave", 128, (x, y) => (Math.sin(x * 1.6) * 0.5 + 0.5) * (Math.sin(y * 1.6) * 0.5 + 0.5), 2.5);
 }
 
+/** Seamless random value per cell, so patterns can repeat without a visible edge. */
+const cellRand = (cx: number, cy: number, wrapX: number, wrapY: number) => {
+  let h = (Math.imul(((cx % wrapX) + wrapX) % wrapX, 374761393) + Math.imul(((cy % wrapY) + wrapY) % wrapY, 668265263)) | 0;
+  h = Math.imul(h ^ (h >>> 13), 1274126177);
+  return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
+};
+
+/**
+ * Fine jersey knit as it really looks: columns of small "V" stitches made of
+ * twisted yarn. One tile is 16 × 22 stitches (about 12 mm), and it repeats
+ * without seams.
+ */
+export function fineKnitNormal(): THREE.Texture {
+  const size = 512;
+  const wales = 16;
+  const courses = 22;
+  const W = size / wales;
+  const C = size / courses;
+  const cosA = 1 / Math.sqrt(1 + ((0.35 * W) / C) ** 2);
+  return normalTexture(
+    "fineKnit",
+    size,
+    (x, y) => {
+      const ry = y / C;
+      const row = Math.floor(ry);
+      const fyBase = ry - row;
+      const wx = x / W;
+      const col = Math.floor(wx);
+      const fx = wx - col - 0.5;
+      let best = 0;
+      for (let dr = -1; dr <= 1; dr++) {
+        const fy = fyBase - dr;
+        if (fy < -0.3 || fy > 1.3) continue;
+        const along = Math.sin(Math.PI * ((fy + 0.3) / 1.6)) ** 0.6;
+        const jitter = (cellRand(col, row + dr, wales, courses) - 0.5) * 0.07;
+        for (let side = -1; side <= 1; side += 2) {
+          const cx = side * (0.4 - 0.35 * fy) + jitter;
+          const q = ((fx - cx) * cosA) / 0.26;
+          if (q <= -1 || q >= 1) continue;
+          const twist = 0.08 * Math.sin((q * 1.7 + fy * 7 * side) * Math.PI);
+          best = Math.max(best, Math.sqrt(1 - q * q) * along * (1 + twist));
+        }
+      }
+      return best;
+    },
+    1.4,
+  );
+}
+
+/** Piqué: a waffle of small raised diamonds (polo shirts). One tile is 8 × 8 cells. */
+export function piqueNormal(): THREE.Texture {
+  const size = 256;
+  const P = size / 8;
+  return normalTexture(
+    "pique",
+    size,
+    (x, y) => {
+      const u = (x + y) / P;
+      const v = (y - x + size) / P;
+      const e = 1 - 2 * Math.max(Math.abs(u - Math.floor(u) - 0.5), Math.abs(v - Math.floor(v) - 0.5));
+      const pillow = Math.min(1, e / 0.5) ** 0.7;
+      return pillow - 0.4 * Math.max(0, (e - 0.55) / 0.45);
+    },
+    1.6,
+  );
+}
+
+/** Felted wool (melton): dense, fine fuzz with no visible knit. */
+export function feltNormal(): THREE.Texture {
+  const size = 256;
+  const f = noiseField(size, 5200, 2);
+  return normalTexture("felt", size, (x, y) => f[y * size + x]!, 1.1);
+}
+
+/**
+ * The faint, uneven tone of real cotton: fibers and yarn that aren't all
+ * the same shade. Multiplied over the garment color (white = no change).
+ * Tileable, about 4 cm per tile.
+ */
+export function fabricMottle(): THREE.Texture {
+  const hit = cache.get("mottle");
+  if (hit) return hit;
+  const size = 256;
+  const f = noiseField(size, 3200, 1);
+  const g = noiseField(size, 260, 9);
+  let max = 0;
+  let maxG = 0;
+  for (let i = 0; i < f.length; i++) {
+    max = Math.max(max, f[i]!);
+    maxG = Math.max(maxG, g[i]!);
+  }
+  const canvas = document.createElement("canvas");
+  canvas.width = canvas.height = size;
+  const ctx = canvas.getContext("2d")!;
+  const img = ctx.createImageData(size, size);
+  for (let i = 0; i < size * size; i++) {
+    // Mostly 1.0, with fine fiber speckle and broad soft patches a few percent darker.
+    const v = 1 - 0.07 * (f[i]! / (max || 1)) - 0.04 * (g[i]! / (maxG || 1));
+    img.data[i * 4] = img.data[i * 4 + 1] = img.data[i * 4 + 2] = Math.round(v * 255);
+    img.data[i * 4 + 3] = 255;
+  }
+  ctx.putImageData(img, 0, 0);
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.anisotropy = 4;
+  cache.set("mottle", tex);
+  return tex;
+}
+
+/** Dashes for stitching: white = thread, black = gap (used as an alpha map along a thread). */
+export function stitchDashes(): THREE.Texture {
+  const hit = cache.get("dashes");
+  if (hit) return hit;
+  const canvas = document.createElement("canvas");
+  canvas.width = 32;
+  canvas.height = 4;
+  const ctx = canvas.getContext("2d")!;
+  ctx.fillStyle = "#000";
+  ctx.fillRect(0, 0, 32, 4);
+  ctx.fillStyle = "#fff";
+  ctx.fillRect(0, 0, 21, 4);
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  cache.set("dashes", tex);
+  return tex;
+}
+
 /** Soft round shadow under the garment. */
 export function groundShadow(): THREE.Texture {
   const hit = cache.get("ground");

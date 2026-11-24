@@ -6,6 +6,12 @@
       "runtimeExecutable": "npm",
       "runtimeArgs": ["run", "dev"],
       "port": 3000
+    },
+    {
+      "name": "arcane-preview",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["scripts/dev-preview.mjs"],
+      "port": 3002
     }
   ]
 }

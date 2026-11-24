@@ -32,6 +32,8 @@ export interface GarmentSpec {
   collar: "tee" | "rib" | "polo" | "none";
   snaps: boolean;
   stripes: boolean;
+  /** How much the fabric folds and hangs (1 = soft jersey; stiff melton folds less). */
+  drape: number;
 }
 
 const deg = (d: number) => (d * Math.PI) / 180;
@@ -40,32 +42,32 @@ const base: Record<MockupId, GarmentSpec> = {
   tshirt: {
     length: 72, band: 0, chestHalf: 27, hemHalf: 26.5, depth: 10.5, shoulderHalf: 23.5, shoulderDrop: 4.5, neckHalf: 8.5,
     frontNeckDrop: 8, backNeckDrop: 2.5, sleeveLong: 58, sleeveShort: 21, angleLong: deg(16), angleShort: deg(34),
-    armRadius: 8.8, wristRadius: 4.6, cuff: 0, hood: false, pocket: false, zipper: false, collar: "tee", snaps: false, stripes: false,
+    armRadius: 8.8, wristRadius: 4.6, cuff: 0, hood: false, pocket: false, zipper: false, collar: "tee", snaps: false, stripes: false, drape: 1,
   },
   polo: {
     length: 72, band: 0, chestHalf: 27, hemHalf: 26.5, depth: 10.5, shoulderHalf: 23, shoulderDrop: 4.5, neckHalf: 8,
     frontNeckDrop: 4, backNeckDrop: 2, sleeveLong: 58, sleeveShort: 21, angleLong: deg(16), angleShort: deg(34),
-    armRadius: 8.8, wristRadius: 4.6, cuff: 0, hood: false, pocket: false, zipper: false, collar: "polo", snaps: false, stripes: false,
+    armRadius: 8.8, wristRadius: 4.6, cuff: 0, hood: false, pocket: false, zipper: false, collar: "polo", snaps: false, stripes: false, drape: 0.85,
   },
   hoodie: {
     length: 70, band: 6.5, chestHalf: 29, hemHalf: 26.5, depth: 12, shoulderHalf: 25, shoulderDrop: 5, neckHalf: 9.5,
     frontNeckDrop: 7, backNeckDrop: 2, sleeveLong: 60, sleeveShort: 22, angleLong: deg(15), angleShort: deg(32),
-    armRadius: 9.6, wristRadius: 5.1, cuff: 7, hood: true, pocket: true, zipper: false, collar: "none", snaps: false, stripes: false,
+    armRadius: 9.6, wristRadius: 5.1, cuff: 7, hood: true, pocket: true, zipper: false, collar: "none", snaps: false, stripes: false, drape: 0.95,
   },
   zipHoodie: {
     length: 70, band: 6.5, chestHalf: 29, hemHalf: 26.5, depth: 12, shoulderHalf: 25, shoulderDrop: 5, neckHalf: 9.5,
     frontNeckDrop: 7, backNeckDrop: 2, sleeveLong: 60, sleeveShort: 22, angleLong: deg(15), angleShort: deg(32),
-    armRadius: 9.6, wristRadius: 5.1, cuff: 7, hood: true, pocket: true, zipper: true, collar: "none", snaps: false, stripes: false,
+    armRadius: 9.6, wristRadius: 5.1, cuff: 7, hood: true, pocket: true, zipper: true, collar: "none", snaps: false, stripes: false, drape: 0.9,
   },
   sweatshirt: {
     length: 68, band: 6.5, chestHalf: 28.5, hemHalf: 26, depth: 11.5, shoulderHalf: 24.5, shoulderDrop: 5, neckHalf: 8.5,
     frontNeckDrop: 7.5, backNeckDrop: 2.5, sleeveLong: 60, sleeveShort: 22, angleLong: deg(15), angleShort: deg(32),
-    armRadius: 9.4, wristRadius: 5, cuff: 7, hood: false, pocket: false, zipper: false, collar: "rib", snaps: false, stripes: false,
+    armRadius: 9.4, wristRadius: 5, cuff: 7, hood: false, pocket: false, zipper: false, collar: "rib", snaps: false, stripes: false, drape: 0.95,
   },
   varsity: {
     length: 66, band: 7, chestHalf: 30, hemHalf: 27, depth: 12.5, shoulderHalf: 25.5, shoulderDrop: 5, neckHalf: 9,
     frontNeckDrop: 9, backNeckDrop: 2.5, sleeveLong: 61, sleeveShort: 22, angleLong: deg(15), angleShort: deg(32),
-    armRadius: 9.8, wristRadius: 5.2, cuff: 7, hood: false, pocket: false, zipper: false, collar: "rib", snaps: true, stripes: true,
+    armRadius: 9.8, wristRadius: 5.2, cuff: 7, hood: false, pocket: false, zipper: false, collar: "rib", snaps: true, stripes: true, drape: 0.45,
   },
 };
 
@@ -148,8 +150,82 @@ export function bodyPoint(s: GarmentSpec, u: number, v: number, side: "front" | 
   const x = u * halfWidthAt(s, v);
   const bot = bottomY(s);
   const y = bot + v * (topY(s, x, side) - bot);
-  const z = bodyZ(s, u, v, x);
+  const z = bodyZ(s, u, v, x) + bodyFold(s, x, y, side);
   return [x, y, side === "front" ? z : -z];
+}
+
+/* ---------- Folds ---------- */
+
+function hash(ix: number, iy: number): number {
+  let h = (Math.imul(ix, 374761393) + Math.imul(iy, 668265263)) | 0;
+  h = Math.imul(h ^ (h >>> 13), 1274126177);
+  return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
+}
+
+/** Smooth random hills, 0–1, about one per unit. */
+export function noise(x: number, y: number): number {
+  const ix = Math.floor(x);
+  const iy = Math.floor(y);
+  const fx = smooth(x - ix);
+  const fy = smooth(y - iy);
+  const a = hash(ix, iy);
+  const b = hash(ix + 1, iy);
+  const c = hash(ix, iy + 1);
+  const d = hash(ix + 1, iy + 1);
+  return a + (b - a) * fx + (c - a) * fy + (a - b - c + d) * fx * fy;
+}
+
+/**
+ * Soft folds where real fabric gathers and hangs, in cm along the outward
+ * normal. Prints use the same surface, so they bend with the folds.
+ */
+export function bodyFold(s: GarmentSpec, x: number, y: number, side: "front" | "back"): number {
+  const h = y - bottomY(s);
+  const v = clamp(h / s.length, 0, 1);
+  const hw = halfWidthAt(s, v);
+  // Side seams stay closed, and the shoulders and neck stay smooth.
+  const keep = (1 - smoothstep(0.7, 0.97, Math.abs(x) / hw)) * (1 - smoothstep(0.74, 0.9, v)) * s.drape;
+  if (keep <= 0) return 0;
+  const k = side === "front" ? 0 : 1.9;
+  const ease = clamp((s.hemHalf - 26) / 3, 0, 1);
+  // A rib band is taut; the folds start just above it.
+  const free = s.band > 0 ? smoothstep(s.band, s.band + 2.5, h) : 1;
+  let f = 0;
+
+  // Gathers where the band pulls the body in, and the body puffing out over it.
+  if (s.band > 0) {
+    const t = (h - s.band) / 10;
+    if (t > 0 && t < 1) {
+      const w = smoothstep(0, 0.12, t) * (1 - smoothstep(0.3, 1, t));
+      const tuck = Math.sin(x / 0.85 + k + 3.2 * (noise(x / 5 + k, 0.5) - 0.5));
+      f += w * (0.34 * tuck * (0.6 + 0.8 * noise(x / 3 + 7, k)) + 0.45);
+    }
+  }
+
+  // Long soft folds hanging from the chest, deeper toward the hem and on looser fits.
+  const hang = 1 - smoothstep(0.15, 0.72, v);
+  f += free * hang * (0.45 + 0.35 * ease) * Math.sin(x / (2.2 + 0.4 * ease) + k + 0.9 * Math.sin(h / 9 + k));
+
+  // Diagonal folds from each armpit down toward the middle (mirrored on each side).
+  const armpitY = -s.shoulderDrop - s.armRadius * 1.7;
+  for (let sgn = -1; sgn <= 1; sgn += 2) {
+    const px = sgn * x - hw * 0.9;
+    const py = y - armpitY;
+    const along = -0.6 * px - 0.8 * py;
+    if (along <= 0 || along >= 26) continue;
+    const across = 0.8 * px - 0.6 * py;
+    const fall = Math.sin((Math.PI * along) / 26);
+    f -= 0.7 * fall * Math.exp(-(across * across) / 5);
+    f += 0.4 * fall * Math.exp(-((across - 2.6) ** 2) / 3.5);
+    f += 0.1 * fall * Math.sin(across / 0.55 + along / 7) * Math.exp(-((across - 1) ** 2) / 14);
+  }
+
+  // A plain hem is folded up and sewn, so its last 2.4 cm are two layers thick.
+  if (s.band === 0) f += 0.09 * (1 - smoothstep(2.2, 2.6, h));
+
+  // Small irregular wrinkles, so it doesn't look machine-made.
+  f += free * (0.22 * (noise(x / 7 + k * 3, h / 9) - 0.5) + 0.1 * (noise(x / 2.6 + 11 + k, h / 3.4) - 0.5));
+  return f * keep;
 }
 
 /** Surface height for any (x, y) on one side (used to lay prints on the body). */
@@ -158,7 +234,7 @@ export function surfaceZ(s: GarmentSpec, x: number, y: number, side: "front" | "
   const top = topY(s, x, side);
   const v = clamp((y - bot) / (top - bot), 0, 1);
   const u = clamp(x / halfWidthAt(s, v), -1, 1);
-  const z = bodyZ(s, u, v, x);
+  const z = bodyZ(s, u, v, x) + bodyFold(s, x, y, side);
   return side === "front" ? z : -z;
 }
 
@@ -205,6 +281,8 @@ export interface SleevePath {
   /** Visible sleeve length from the shoulder to the hem/cuff. */
   length: number;
   side: 1 | -1;
+  /** How much the sleeve folds (from the garment). */
+  drape: number;
 }
 
 function bezier(p0: Vec3, p1: Vec3, p2: Vec3, p3: Vec3, t: number): Vec3 {
@@ -245,7 +323,7 @@ export function sleevePath(s: GarmentSpec, side: 1 | -1, long: boolean): SleeveP
     if (!shoulder && side * p[0] >= shoulderX) shoulder = acc;
   }
   // The cuff continues past the sleeve fabric.
-  return { samples, shoulder, length: acc - shoulder - cuff, side };
+  return { samples, shoulder, length: acc - shoulder - cuff, side, drape: s.drape };
 }
 
 /** Center and cross-section basis at a distance from the shoulder (negative = inside the body). */
@@ -270,7 +348,28 @@ export function sleeveRadius(s: GarmentSpec, t: number, long: boolean): number {
   return lerp(s.armRadius, end, Math.pow(clamp(t, 0, 1), 0.85));
 }
 
-export function sleevePoint(path: SleevePath, along: number, theta: number, r: number): Vec3 {
+/** Folds on a sleeve, in cm outward: bunching above the cuff, elbow creases, a soft wave at a short hem. */
+export function sleeveFold(path: SleevePath, along: number, theta: number): number {
+  const L = path.length;
+  if (along <= 0.5 || along >= L) return 0;
+  const sd = path.side;
+  let f = 0;
+  if (L > 35) {
+    const w = smoothstep(L - 24, L - 8, along) * (1 - smoothstep(L - 1.5, L, along));
+    const phase = along / 0.75 + 6.6 * (noise(along / 3 + sd * 7, theta * 1.3) - 0.5) + 1.1 * Math.sin(theta * 2 + sd);
+    const depth = (0.38 + 0.22 * Math.cos(theta + 0.5 * sd)) * (0.6 + 0.8 * noise(along / 5 + 3, theta * 0.9 + sd));
+    f += w * (depth * Math.sin(phase) + 0.1 * Math.sin(along / 0.35 + theta * 3));
+    const elbow = Math.exp(-((along - L * 0.55) ** 2) / 30);
+    f += elbow * 0.3 * Math.sin(along / 0.9 + 2 * Math.sin(theta)) * (0.5 + 0.5 * Math.cos(theta - Math.PI * 0.5 * sd));
+  } else {
+    f += smoothstep(L * 0.4, L, along) * 0.3 * Math.sin(theta * 3 + 0.7 * sd);
+  }
+  f += 0.14 * (noise(along / 4, theta * 1.6 + sd * 5) - 0.5);
+  return f * smoothstep(0.5, 5, along) * path.drape;
+}
+
+export function sleevePoint(path: SleevePath, along: number, theta: number, r0: number): Vec3 {
+  const r = r0 + sleeveFold(path, along, theta);
   const f = sleeveAt(path, along);
   const ct = Math.cos(theta);
   const st = Math.sin(theta);
@@ -302,5 +401,12 @@ export function hoodPoint(s: GarmentSpec, a: number, b: number): Vec3 {
   const d = d0 * (0.95 + 0.5 * Math.sin(b * Math.PI)) * Math.max(crown, 0.35);
   const y = -2.5 + HOOD_HEIGHT * Math.sin((b * Math.PI) / 2);
   const lean = -13 * b * b - 2.5;
-  return [w * Math.sin(a), y, -d * Math.cos(a) + lean];
+  // The ridge of the center seam, and soft folds as the hood rests on the back.
+  const fold =
+    0.32 * Math.exp(-(a * a) / 0.006) * smoothstep(0.04, 0.25, b) +
+    0.35 * Math.sin(b * Math.PI) * Math.sin(a * 4.3 + 0.6) * (1 - Math.abs(a) / HOOD_OPEN);
+  const nx = Math.sin(a) / Math.max(w, 1);
+  const nz = -Math.cos(a) / Math.max(d, 1);
+  const nl = Math.hypot(nx, nz) || 1;
+  return [w * Math.sin(a) + (fold * nx) / nl, y, -d * Math.cos(a) + lean + (fold * nz) / nl];
 }

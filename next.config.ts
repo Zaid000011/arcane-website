@@ -8,6 +8,8 @@ const staticSite = process.env.NEXT_PUBLIC_STATIC_SITE === "1";
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
+  // The live preview builds into its own folder so it can run next to the site.
+  distDir: process.env.NEXT_DIST_DIR || ".next",
   ...(staticSite
     ? {
         output: "export",

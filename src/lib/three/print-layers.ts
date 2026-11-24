@@ -94,7 +94,8 @@ function samplerFor(build: GarmentBuild, pl: Placement): Sampler {
       const theta = theta0 + (dir * (pl.cx + x)) / r;
       const p = sleevePoint(path, along, theta, r);
       const c = sleeveAt(path, along).c;
-      const n: Vec3 = [(p[0] - c[0]) / r, (p[1] - c[1]) / r, (p[2] - c[2]) / r];
+      const d = Math.hypot(p[0] - c[0], p[1] - c[1], p[2] - c[2]) || r;
+      const n: Vec3 = [(p[0] - c[0]) / d, (p[1] - c[1]) / d, (p[2] - c[2]) / d];
       return { p, n };
     };
   }

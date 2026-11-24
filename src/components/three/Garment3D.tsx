@@ -33,6 +33,9 @@ export default function Garment3D({
   const [stage, setStage] = useState<GarmentStage | null>(null);
   const product = catalog.products.find((p) => p.id === design.productId) ?? catalog.products[0]!;
   const color = catalog.colors.find((c) => c.id === design.bodyColorId)?.hex ?? "#151515";
+  const fabric = product.fabrics.find((f) => f.id === design.fabricId) ?? product.fabrics[0];
+  const fabricId = fabric?.id ?? "cotton";
+  const fabricKind = fabric?.kind ?? "cotton";
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -54,8 +57,8 @@ export default function Garment3D({
   }, []);
 
   useEffect(() => {
-    stageRef.current?.setGarment(product.mockup, design.sleeve, design.fitId, color);
-  }, [product.mockup, design.sleeve, design.fitId, color]);
+    stageRef.current?.setGarment(product.mockup, design.sleeve, design.fitId, color, { id: fabricId, kind: fabricKind });
+  }, [product.mockup, design.sleeve, design.fitId, color, fabricId, fabricKind]);
 
   // Prints are redrawn shortly after changes stop, so dragging artwork stays smooth.
   useEffect(() => {
