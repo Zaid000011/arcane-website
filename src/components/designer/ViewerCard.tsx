@@ -1,7 +1,7 @@
 "use client";
 
-import { Camera, Redo2, Rotate3d, Search, SearchX, Undo2 } from "lucide-react";
-import { useMemo, useState, type ReactNode } from "react";
+import { Camera, Redo2, Rotate3d, Search, Undo2, X } from "lucide-react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { canShowPhoto, GarmentView, useViewMode, ViewModeToggle } from "@/components/garment/GarmentView";
 import type { CloseUpView } from "@/components/three/CloseUpOverlay";
 import { tr } from "@/lib/catalog";
@@ -35,7 +35,7 @@ export function ViewerCard({
   const sample = useDesignStore((s) => s.order.roster.find((r) => r.name || r.number));
   const samples = useMemo(() => ({ name: sample?.name || t.sampleName, number: sample?.number || t.sampleNumber }), [sample?.name, sample?.number, t.sampleName, t.sampleNumber]);
   const product = catalog.products.find((p) => p.id === design.productId);
-  const [hideCloseUp, setHideCloseUp] = useState(false);
+  const [hideCloseUp, setHideCloseUp] = useCloseUpHidden();
   const [mode, setMode] = useViewMode();
   const photo = mode === "photo" && canShowPhoto(catalog, design);
 
@@ -58,11 +58,6 @@ export function ViewerCard({
         {canShowPhoto(catalog, design) ? <ViewModeToggle mode={mode} onChange={setMode} /> : null}
       </div>
       <div className="absolute end-3 top-3 z-10 flex gap-1 rounded-full border border-line bg-ink/80 p-1">
-        {closeUp ? (
-          <IconButton label={hideCloseUp ? t.closeUpOn : t.closeUpOff} pressed={!hideCloseUp} onClick={() => setHideCloseUp((v) => !v)}>
-            {hideCloseUp ? <Search className="h-4 w-4" /> : <SearchX className="h-4 w-4" />}
-          </IconButton>
-        ) : null}
         <IconButton label={t.undo} disabled={!canUndo} onClick={undo}>
           <Undo2 className="h-4 w-4 rtl:-scale-x-100" />
         </IconButton>
@@ -83,6 +78,17 @@ export function ViewerCard({
           closeUp={hideCloseUp ? null : closeUp}
         />
       </div>
+      {closeUp ? (
+        <button
+          type="button"
+          aria-pressed={!hideCloseUp}
+          onClick={() => setHideCloseUp(!hideCloseUp)}
+          className="absolute start-2 bottom-2 z-10 inline-flex items-center gap-1.5 rounded-full border border-gold/60 bg-ink/90 px-3 py-1.5 text-xs font-semibold text-gold-light shadow-lg transition-colors hover:border-gold hover:text-gold"
+        >
+          {hideCloseUp ? <Search className="h-3.5 w-3.5" aria-hidden /> : <X className="h-3.5 w-3.5" aria-hidden />}
+          {hideCloseUp ? t.showCloseUp : t.hideCloseUp}
+        </button>
+      ) : null}
       <p className={`pointer-events-none absolute inset-x-0 bottom-2 justify-center px-3 ${compact ? "hidden lg:flex" : "flex"}`}>
         <span className="inline-flex items-center gap-1.5 rounded-full bg-ink/70 px-3 py-1 text-center text-xs text-cream-muted">
           {photo ? <Camera className="h-3.5 w-3.5 shrink-0" aria-hidden /> : <Rotate3d className="h-3.5 w-3.5 shrink-0" aria-hidden />} {photo ? t.photoHint : t.dragToRotate}
@@ -90,6 +96,30 @@ export function ViewerCard({
       </p>
     </div>
   );
+}
+
+const CLOSE_UP_KEY = "arcane-closeup-hidden";
+
+/** Whether the customer hid the close-up. Remembered on this device, so it stays hidden on every step and visit. */
+function useCloseUpHidden(): [boolean, (hidden: boolean) => void] {
+  const [hidden, setHidden] = useState(false);
+  useEffect(() => {
+    try {
+      setHidden(localStorage.getItem(CLOSE_UP_KEY) === "1");
+    } catch {
+      // Storage can be blocked; the close-up then just starts shown.
+    }
+  }, []);
+  const set = (next: boolean) => {
+    setHidden(next);
+    try {
+      if (next) localStorage.setItem(CLOSE_UP_KEY, "1");
+      else localStorage.removeItem(CLOSE_UP_KEY);
+    } catch {
+      // Not remembered, but still hidden for now.
+    }
+  };
+  return [hidden, set];
 }
 
 function IconButton({ label, disabled, pressed, onClick, children }: { label: string; disabled?: boolean; pressed?: boolean; onClick: () => void; children: ReactNode }) {

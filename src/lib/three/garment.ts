@@ -21,6 +21,7 @@ import {
   type Vec3,
 } from "./shape";
 import { fabricMottle, feltNormal, fineKnitNormal, piqueNormal, ribNormal, stitchDashes } from "./textures";
+import { FULL_TRIMS, type GarmentTrims } from "@/lib/design/options";
 
 export interface GarmentBuild {
   group: THREE.Group;
@@ -231,8 +232,15 @@ function frontRibbon(s: GarmentSpec, x0: number, x1: number, y0: number, y1: num
   }, y1 < y0);
 }
 
-export function buildGarment(mockup: MockupId, sleeve: Sleeve, fitId: string, color: string, finish: FabricFinish = DEFAULT_FINISH): GarmentBuild {
-  const s = specFor(mockup, fitId);
+export function buildGarment(
+  mockup: MockupId,
+  sleeve: Sleeve,
+  fitId: string,
+  color: string,
+  finish: FabricFinish = DEFAULT_FINISH,
+  trims: GarmentTrims = FULL_TRIMS,
+): GarmentBuild {
+  const s = specFor(mockup, fitId, trims);
   const long = sleeve === "long";
   const group = new THREE.Group();
   const fabric = fabricMaterial(color, false, finish);

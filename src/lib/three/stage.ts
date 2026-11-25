@@ -6,6 +6,7 @@ import { applyFinish, buildGarment, disposeGroup, fabricFinish, setFabricColor, 
 import { buildModel, hasModel, recolorModel, type ModelBuild } from "./model";
 import type { Vec3 } from "./shape";
 import { groundShadow } from "./textures";
+import { FULL_TRIMS, hasFullTrims, trimsKey, type GarmentTrims } from "@/lib/design/options";
 
 export type StageView = "front" | "back" | "left" | "right";
 
@@ -103,9 +104,17 @@ export class GarmentStage {
    * Builds the garment (or, when only the color or fabric changed, just
    * recolors it and swaps the knit texture).
    */
-  setGarment(mockup: MockupId, sleeve: Sleeve, fitId: string, color: string, fabric: { id: string; kind: string } = { id: "cotton", kind: "cotton" }) {
+  setGarment(
+    mockup: MockupId,
+    sleeve: Sleeve,
+    fitId: string,
+    color: string,
+    fabric: { id: string; kind: string } = { id: "cotton", kind: "cotton" },
+    trims: GarmentTrims = FULL_TRIMS,
+  ) {
     // A real 3D model, when this garment has one: the drawn garment shows until it has loaded.
-    const modelKey = hasModel(mockup, sleeve) ? `${mockup}-${sleeve}` : "";
+    // The models have rib cuffs and waistbands, so without them the drawn garment is used.
+    const modelKey = hasFullTrims(trims) && hasModel(mockup, sleeve) ? `${mockup}-${sleeve}` : "";
     this.modelColor = color;
     if (modelKey && this.model?.key === modelKey) {
       recolorModel(this.model, color);
@@ -141,7 +150,7 @@ export class GarmentStage {
         })
         .catch(() => undefined);
     }
-    const key = `${mockup}|${sleeve}|${fitId}`;
+    const key = `${mockup}|${sleeve}|${fitId}${trimsKey(trims)}`;
     const finishKey = `${fabric.id}|${fabric.kind}`;
     if (this.garment && key === this.garmentKey) {
       setFabricColor(this.garment.fabric, color);
@@ -156,7 +165,7 @@ export class GarmentStage {
       this.scene.remove(this.garment.group);
       disposeGroup(this.garment.group);
     }
-    this.garment = buildGarment(mockup, sleeve, fitId, color, fabricFinish(fabric.id, fabric.kind));
+    this.garment = buildGarment(mockup, sleeve, fitId, color, fabricFinish(fabric.id, fabric.kind), trims);
     this.garmentKey = key;
     this.finishKey = finishKey;
     this.scene.add(this.garment.group);

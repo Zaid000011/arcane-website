@@ -254,7 +254,7 @@ export function Designer({ catalog, initialProductId }: { catalog: Catalog; init
 
           {step === "garment" && <GarmentPanel {...panelProps} onSendSize={() => setSendKind("size")} />}
           {step === "fabric" && <FabricPanel {...panelProps} />}
-          {step === "colors" && <ColorsPanel {...panelProps} onSendColor={() => setSendKind("color")} />}
+          {step === "colors" && <ColorsPanel {...panelProps} />}
           {step === "prints" && <PrintsPanel {...panelProps} onFocusPrint={focusPrint} onExplainPrints={() => setExplainPrints(true)} />}
           {step === "names" && <PersonalizationPanel {...panelProps} />}
           {step === "sizes" && <SizesPanel catalog={catalog} design={design} quote={quote} onSendSize={() => setSendKind("size")} />}

@@ -2,6 +2,7 @@ import type { Catalog } from "@/lib/catalog/types";
 import type { DesignSelection } from "@/lib/pricing/types";
 import { updatePrintLayers, type PrintSamples } from "./print-layers";
 import { GarmentStage, type StageView } from "./stage";
+import { bodyHex, trimsOf } from "@/lib/design/options";
 
 /**
  * Still pictures of designs (cart, review, home page). One hidden renderer
@@ -37,9 +38,9 @@ export function renderGarmentImage(
     if (again) return again;
     const s = getStage();
     const product = catalog.products.find((p) => p.id === design.productId) ?? catalog.products[0]!;
-    const color = catalog.colors.find((c) => c.id === design.bodyColorId)?.hex ?? "#151515";
+    const color = bodyHex(catalog, design);
     const fabric = product.fabrics.find((f) => f.id === design.fabricId) ?? product.fabrics[0];
-    s.setGarment(product.mockup, design.sleeve, design.fitId, color, { id: fabric?.id ?? "cotton", kind: fabric?.kind ?? "cotton" });
+    s.setGarment(product.mockup, design.sleeve, design.fitId, color, { id: fabric?.id ?? "cotton", kind: fabric?.kind ?? "cotton" }, trimsOf(product, design));
     s.resize(width, height);
     s.setView(view, false);
     await updatePrintLayers(s, catalog, design, { samples });

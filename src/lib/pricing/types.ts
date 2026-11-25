@@ -46,6 +46,15 @@ export interface DesignSelection {
   gsm: number;
   fabricId: string;
   bodyColorId: string;
+  /**
+   * The customer's own body color (#RRGGBB) when none of ours fit. The garment is shown and made in it;
+   * bodyColorId then holds the closest color we stock (used for checks like light-garment-only prints).
+   */
+  customColorHex?: string;
+  /** Plain sleeve ends instead of rib cuffs (garments that have rib cuffs, long sleeves). */
+  noCuffs?: boolean;
+  /** A straight hem instead of a rib waistband (garments that have one). */
+  noWaistband?: boolean;
   /** Color per garment part (hood lining, cuffs…). Missing = same as body. */
   partColors: Record<string, string>;
   prints: PrintSelection[];

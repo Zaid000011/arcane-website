@@ -2,7 +2,9 @@ import { sleeveLabels, tierLabels, tr } from "@/lib/catalog";
 import type { Catalog, Locale } from "@/lib/catalog/types";
 import type { DesignSelection } from "@/lib/pricing/types";
 import type { Dictionary } from "@/i18n/dictionaries/en";
+import { fmt } from "@/i18n/format";
 import { withFreePrints } from "./logic";
+import { bodyHex, trimsOf } from "./options";
 import { isPrintSide, printBounds, sideNames } from "./sides";
 
 /** Short human-readable lines describing a design, for the review step and the cart. */
@@ -15,6 +17,7 @@ export function describeDesign(catalog: Catalog, saved: DesignSelection, locale:
   };
   const fit = catalog.fits.find((f) => f.id === d.fitId);
   const fabric = product?.fabrics.find((f) => f.id === d.fabricId);
+  const trims = trimsOf(product, d);
 
   const garment = [
     product ? tr(product.name, locale) : d.productId,
@@ -22,12 +25,14 @@ export function describeDesign(catalog: Catalog, saved: DesignSelection, locale:
     fit ? tr(fit.name, locale) : null,
     `${d.gsm} GSM`,
     fabric ? tr(fabric.name, locale) : null,
+    trims.cuffs ? null : t.noCuffsLine,
+    trims.waistband ? null : t.noWaistbandLine,
   ]
     .filter(Boolean)
     .join(" · ");
 
   const colors = [
-    colorName(d.bodyColorId),
+    d.customColorHex ? fmt(t.customColorLine, { hex: bodyHex(catalog, d) }) : colorName(d.bodyColorId),
     ...Object.entries(d.partColors).map(([partId, colorId]) => {
       const part = catalog.colorParts.find((p) => p.id === partId);
       return `${part ? tr(part.name, locale) : partId}: ${colorName(colorId)}`;

@@ -181,59 +181,18 @@ export function sampleArt(methodId: string, garmentHex: string, size: number): H
 }
 
 /**
- * A square piece of the customer's own artwork for the close-up, chosen where
- * the print has an edge, so both the print and the fabric around it show.
+ * The customer's whole artwork, centred in a square, for the close-up: what
+ * they wrote stays readable, drawn in the print type's finish on the fabric.
+ * Returns how many mm of fabric the square shows (enough for the circle to
+ * take in the artwork's full diagonal).
  */
-export function cropArt(art: HTMLCanvasElement, wMm: number, hMm: number, size: number): HTMLCanvasElement | null {
-  const gw = Math.max(1, Math.round(wMm));
-  const gh = Math.max(1, Math.round(hMm));
-  const small = document.createElement("canvas");
-  small.width = gw;
-  small.height = gh;
-  const sctx = small.getContext("2d", { willReadFrequently: true })!;
-  sctx.drawImage(art, 0, 0, gw, gh);
-  const data = sctx.getImageData(0, 0, gw, gh).data;
-
-  // Sum of coverage over any rectangle in one step.
-  const W = gw + 1;
-  const sat = new Float64Array(W * (gh + 1));
-  let total = 0;
-  let mx = 0;
-  let my = 0;
-  for (let y = 0; y < gh; y++) {
-    for (let x = 0; x < gw; x++) {
-      const a = data[(y * gw + x) * 4 + 3]! / 255;
-      total += a;
-      mx += a * x;
-      my += a * y;
-      sat[(y + 1) * W + x + 1] = a + sat[y * W + x + 1]! + sat[(y + 1) * W + x]! - sat[y * W + x]!;
-    }
-  }
-  if (total < 1) return null;
-  mx /= total;
-  my /= total;
-  const area = (x0: number, y0: number, x1: number, y1: number) => {
-    const ax = Math.max(0, Math.min(gw, x0));
-    const ay = Math.max(0, Math.min(gh, y0));
-    const bx = Math.max(0, Math.min(gw, x1));
-    const by = Math.max(0, Math.min(gh, y1));
-    return sat[by * W + bx]! - sat[ay * W + bx]! - sat[by * W + ax]! + sat[ay * W + ax]!;
-  };
-
-  const win = PRINT_VIEW_MM;
-  let best = { x: mx - win / 2, y: my - win / 2, score: Infinity };
-  for (let y = -win / 2; y <= gh - win / 2; y += 1) {
-    for (let x = -win / 2; x <= gw - win / 2; x += 1) {
-      const cover = area(Math.round(x), Math.round(y), Math.round(x + win), Math.round(y + win)) / (win * win);
-      const score = Math.abs(cover - 0.45) + 0.004 * Math.hypot(x + win / 2 - mx, y + win / 2 - my);
-      if (score < best.score) best = { x, y, score };
-    }
-  }
-  const out = document.createElement("canvas");
-  out.width = out.height = size;
-  const k = art.width / wMm;
-  out.getContext("2d")!.drawImage(art, best.x * k, best.y * k, win * k, win * k, 0, 0, size, size);
-  return out;
+export function fitArt(art: HTMLCanvasElement, wMm: number, hMm: number, size: number): { canvas: HTMLCanvasElement; viewMm: number } {
+  const viewMm = Math.min(450, Math.max(PRINT_VIEW_MM, Math.hypot(wMm, hMm) * 1.06));
+  const k = size / viewMm;
+  const canvas = document.createElement("canvas");
+  canvas.width = canvas.height = size;
+  canvas.getContext("2d")!.drawImage(art, (size - wMm * k) / 2, (size - hMm * k) / 2, wMm * k, hMm * k);
+  return { canvas, viewMm };
 }
 
 /** Pixel size for a close-up shown `cssPx` wide: sharp on phones, but not so big it's slow to draw. */

@@ -53,6 +53,10 @@ export interface Product {
   colorPartIds: string[];
   printAreaIds: string[];
   mockup: MockupId;
+  /** Has rib cuffs on its long sleeves, which customers can take off. */
+  ribCuffs?: boolean;
+  /** Has a rib waistband, which customers can take off for a straight hem. */
+  ribWaistband?: boolean;
 }
 
 export interface FitOption {

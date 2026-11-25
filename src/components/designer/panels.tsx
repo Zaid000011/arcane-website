@@ -4,12 +4,16 @@ import { BookOpen, Check, ChevronRight, Minus, Palette, Plus, Search, X, type Lu
 import { useEffect, useState, type ReactNode } from "react";
 import { isLightHex } from "@/components/garment/color";
 import { SizeChartButton } from "@/components/size/SizeChart";
+import { MethodDetails } from "./PrintTypesDialog";
 import { GarmentImage } from "@/components/three/GarmentImage";
 import { sleeveLabels, startingPrice, tierHints, tierLabels, tr } from "@/lib/catalog";
 import type { Catalog, Product } from "@/lib/catalog/types";
 import { addPrint, defaultDesign, methodBlock, removePrint, switchProduct, updatePrint } from "@/lib/design/logic";
 import { isPrintSide, MAX_PRINTS_PER_SIDE, maxTierOf, printBounds, sideNames, sidesFor, sideView, tierLimitCm, type PrintSide } from "@/lib/design/sides";
+import { bodyHex, canRemoveCuffs, canRemoveWaistband, HEX_COLOR } from "@/lib/design/options";
 import { useDesignStore } from "@/lib/design/store";
+import { closestColor } from "@/lib/color-match";
+import { printPhotoUrl } from "@/lib/print-photos";
 import type { DesignSelection, PrintSelection } from "@/lib/pricing/types";
 import { useI18n } from "@/i18n/client";
 import { fmt, formatDelta, formatMoney } from "@/i18n/format";
@@ -84,6 +88,45 @@ export function GarmentPanel({ catalog, design, product, update, onSendSize }: P
         </section>
       ) : null}
 
+      {canRemoveCuffs(product, design.sleeve) || canRemoveWaistband(product) ? (
+        <section>
+          <FieldLabel hint={t.trimsIncluded}>{t.trimsTitle}</FieldLabel>
+          <div className="space-y-3">
+            {canRemoveCuffs(product, design.sleeve) ? (
+              <div>
+                <p className="mb-2 text-xs font-semibold text-cream-muted">{t.sleeveEnds}</p>
+                <div className="grid grid-cols-2 gap-3">
+                  <Choice selected={!design.noCuffs} onSelect={() => update({ ...design, noCuffs: false })}>
+                    <span className="block font-semibold text-cream">{t.ribCuffs}</span>
+                  </Choice>
+                  <Choice selected={Boolean(design.noCuffs)} onSelect={() => update({ ...design, noCuffs: true })}>
+                    <span className="block font-semibold text-cream">{t.noCuffs}</span>
+                    <span className="text-xs">{t.noCuffsHint}</span>
+                  </Choice>
+                </div>
+              </div>
+            ) : null}
+            {canRemoveWaistband(product) ? (
+              <div>
+                <p className="mb-2 text-xs font-semibold text-cream-muted">{t.bottomHem}</p>
+                <div className="grid grid-cols-2 gap-3">
+                  <Choice selected={!design.noWaistband} onSelect={() => update({ ...design, noWaistband: false })}>
+                    <span className="block font-semibold text-cream">{t.ribWaistband}</span>
+                  </Choice>
+                  <Choice selected={Boolean(design.noWaistband)} onSelect={() => update({ ...design, noWaistband: true })}>
+                    <span className="block font-semibold text-cream">{t.noWaistband}</span>
+                    <span className="text-xs">{t.noWaistbandHint}</span>
+                  </Choice>
+                </div>
+              </div>
+            ) : null}
+            {(design.noCuffs && canRemoveCuffs(product, design.sleeve)) || (design.noWaistband && canRemoveWaistband(product)) ? (
+              <p className="rounded-lg bg-ink/60 px-3 py-2 text-xs text-cream-muted">{t.trims3dNote}</p>
+            ) : null}
+          </div>
+        </section>
+      ) : null}
+
       <SizeChartButton catalog={catalog} productId={product.id} fitId={design.fitId} sleeve={design.sleeve} onSendSize={onSendSize} />
     </div>
   );
@@ -137,21 +180,34 @@ export function FabricPanel({ design, product, update }: PanelProps) {
 /* ---------- Colors ---------- */
 
 /** One color for the whole garment (separate colors for hood lining, strings, cuffs… were removed on request). */
-export function ColorsPanel({ catalog, design, update, onSendColor }: PanelProps & { onSendColor: () => void }) {
+export function ColorsPanel({ catalog, design, update }: PanelProps) {
   const { locale, dict } = useI18n();
   const t = dict.designer;
   const bodyColor = catalog.colors.find((c) => c.id === design.bodyColorId);
+  const own = design.customColorHex ? bodyHex(catalog, design) : null;
 
   return (
     <div className="space-y-8">
       <section>
-        <FieldLabel hint={bodyColor ? <span>{tr(bodyColor.name, locale)} · <span dir="ltr" className="font-mono">{bodyColor.hex.toUpperCase()}</span></span> : undefined}>
+        <FieldLabel
+          hint={
+            own ? (
+              <span>
+                {t.customColorShort} · <span dir="ltr" className="font-mono">{own}</span>
+              </span>
+            ) : bodyColor ? (
+              <span>
+                {tr(bodyColor.name, locale)} · <span dir="ltr" className="font-mono">{bodyColor.hex.toUpperCase()}</span>
+              </span>
+            ) : undefined
+          }
+        >
           {t.bodyColor}
         </FieldLabel>
         <p className="-mt-1 mb-3 text-xs text-cream-muted">{t.colorCodeHint}</p>
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
           {catalog.colors.map((c) => {
-            const selected = design.bodyColorId === c.id;
+            const selected = !own && design.bodyColorId === c.id;
             const name = tr(c.name, locale);
             return (
               <button
@@ -160,7 +216,7 @@ export function ColorsPanel({ catalog, design, update, onSendColor }: PanelProps
                 aria-pressed={selected}
                 disabled={!c.inStock}
                 aria-label={`${name} ${c.hex.toUpperCase()}${c.inStock ? "" : ` (${t.outOfStock})`}`}
-                onClick={() => update({ ...design, bodyColorId: c.id })}
+                onClick={() => update({ ...design, bodyColorId: c.id, customColorHex: undefined })}
                 className={`flex min-w-0 items-center gap-2.5 rounded-xl border px-2.5 py-2 text-start transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
                   selected ? "border-gold bg-gold/10" : "border-line bg-ink-2/60 hover:border-gold/50"
                 }`}
@@ -182,10 +238,101 @@ export function ColorsPanel({ catalog, design, update, onSendColor }: PanelProps
             );
           })}
         </div>
-        <SendItButton icon={Palette} onClick={onSendColor}>
-          {dict.send.colorButton}
-        </SendItButton>
+        <OwnColor catalog={catalog} design={design} update={update} />
       </section>
+    </div>
+  );
+}
+
+/** "Can't find your color?": any color, shown on the garment straight away and sent with the order. */
+function OwnColor({ catalog, design, update }: Omit<PanelProps, "product">) {
+  const { locale, dict } = useI18n();
+  const t = dict.designer;
+  const own = design.customColorHex ? bodyHex(catalog, design) : null;
+  const [open, setOpen] = useState(Boolean(own));
+  const [text, setText] = useState(own ?? "");
+  useEffect(() => {
+    if (own) setText((v) => (v.toUpperCase() === own ? v : own));
+  }, [own]);
+  const inStock = catalog.colors.filter((c) => c.inStock);
+  const shown = own ?? bodyHex(catalog, design);
+  const match = closestColor(shown, inStock);
+
+  const apply = (hex: string) => {
+    const value = hex.toUpperCase();
+    const near = closestColor(value, inStock);
+    update({ ...design, customColorHex: value, bodyColorId: near?.color.id ?? design.bodyColorId }, "ownColor");
+  };
+
+  if (!open) {
+    return (
+      <SendItButton
+        icon={Palette}
+        onClick={() => {
+          setOpen(true);
+          apply(shown);
+        }}
+      >
+        {t.customColorButton}
+      </SendItButton>
+    );
+  }
+
+  return (
+    <div className="mt-3 space-y-3 rounded-xl border border-gold/50 bg-ink/50 p-4">
+      <p className="font-semibold text-cream">{t.customColorTitle}</p>
+      <p className="text-xs leading-relaxed text-cream-muted">{t.customColorIntro}</p>
+      <div className="flex flex-wrap items-center gap-3">
+        <label className="relative inline-flex h-12 w-12 shrink-0 cursor-pointer overflow-hidden rounded-full border-2 border-gold" style={{ backgroundColor: shown }}>
+          <span className="sr-only">{t.customColorPick}</span>
+          <input type="color" value={shown.toLowerCase()} onChange={(e) => apply(e.target.value)} className="absolute inset-0 h-full w-full cursor-pointer opacity-0" />
+        </label>
+        <label className="min-w-0 flex-1">
+          <span className="mb-1 block text-xs text-cream-muted">{t.customColorCode}</span>
+          <input
+            value={text}
+            dir="ltr"
+            maxLength={7}
+            spellCheck={false}
+            placeholder="#1C2541"
+            aria-invalid={text !== "" && !HEX_COLOR.test(text.startsWith("#") ? text : `#${text}`)}
+            onChange={(e) => {
+              const v = e.target.value.trim();
+              setText(v);
+              const hex = v.startsWith("#") ? v : `#${v}`;
+              if (HEX_COLOR.test(hex)) apply(hex);
+            }}
+            className="w-full max-w-40 rounded-lg border border-line bg-ink px-3 py-2 font-mono text-cream uppercase focus:border-gold focus:outline-none aria-[invalid=true]:border-arcane-bright"
+          />
+        </label>
+      </div>
+      {match && own ? (
+        <p className="flex flex-wrap items-center gap-2 text-xs text-cream-muted">
+          <span className="h-5 w-5 shrink-0 rounded-full border border-black/40" style={{ backgroundColor: match.color.hex }} aria-hidden />
+          {fmt(t.closestStocked, { name: tr(match.color.name, locale) })}
+          <span dir="ltr" className="font-mono">{match.color.hex.toUpperCase()}</span>
+          <button
+            type="button"
+            onClick={() => {
+              update({ ...design, bodyColorId: match.color.id, customColorHex: undefined });
+              setOpen(false);
+            }}
+            className="font-semibold text-gold hover:text-gold-light"
+          >
+            {t.useStocked}
+          </button>
+        </p>
+      ) : null}
+      <button
+        type="button"
+        onClick={() => {
+          update({ ...design, customColorHex: undefined });
+          setOpen(false);
+        }}
+        className="text-sm text-cream-muted underline-offset-2 hover:text-cream hover:underline"
+      >
+        {t.backToOurColors}
+      </button>
     </div>
   );
 }
@@ -357,16 +504,24 @@ function PrintSettings({ catalog, design, print, update }: { catalog: Catalog; d
             const block = methodBlock(catalog, design, m.id);
             const price = m.prices[print.tier];
             const tooBig = price === undefined;
+            const photo = printPhotoUrl(m.id);
+            const selected = print.methodId === m.id;
             return (
-              <Choice
+              <button
                 key={m.id}
-                selected={print.methodId === m.id}
-                muted={Boolean(block)}
-                onSelect={() => update(updatePrint(catalog, design, print.id, { methodId: m.id }))}
-                className="px-2.5 py-2"
+                type="button"
+                aria-pressed={selected}
+                onClick={() => update(updatePrint(catalog, design, print.id, { methodId: m.id }))}
+                className={`overflow-hidden rounded-xl border text-start transition-colors ${
+                  selected ? "border-gold bg-gold/10 ring-1 ring-gold" : "border-line bg-ink-2/60 hover:border-gold/50"
+                } ${block ? "opacity-55" : ""}`}
               >
-                <span className="block text-sm font-semibold text-cream">{tr(m.name, locale)}</span>
-                <span className="text-xs">
+                {photo ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={photo} alt="" width={720} height={720} loading="lazy" className="aspect-[4/3] w-full object-cover" />
+                ) : null}
+                <span className="block px-2.5 pt-2 text-sm font-semibold text-cream">{tr(m.name, locale)}</span>
+                <span className="block px-2.5 pb-2 text-xs text-cream-muted">
                   {block
                     ? block === "fabric"
                       ? t.unavailableFabric
@@ -375,10 +530,15 @@ function PrintSettings({ catalog, design, print, update }: { catalog: Catalog; d
                       ? fmt(t.methodUpTo, { size: tr(tierLabels[maxTierOf(m)], locale) })
                       : `${formatMoney(price, locale)}${m.pricedPerColor ? ` / ${dict.pricing.perColor}` : ""}`}
                 </span>
-              </Choice>
+              </button>
             );
           })}
         </div>
+        {method ? (
+          <div className="mt-3 rounded-xl border border-line bg-ink/50 p-4">
+            <MethodDetails method={method} />
+          </div>
+        ) : null}
       </div>
 
       {method?.pricedPerColor ? (

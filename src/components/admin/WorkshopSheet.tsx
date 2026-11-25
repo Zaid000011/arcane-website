@@ -18,6 +18,7 @@ import type { DesignSelection, PersonalStyle, PrintSelection } from "@/lib/prici
 import type { OrderNote } from "@/server/orders";
 import { artworkLine } from "./TeamOrderItems";
 import { day, when } from "./ui";
+import { bodyHex, canRemoveCuffs, canRemoveWaistband, trimsOf } from "@/lib/design/options";
 
 const cm = (mm: number) => (mm / 10).toFixed(1);
 
@@ -95,6 +96,8 @@ function ItemSection({ item, index, count, catalog }: { item: OrderItem; index: 
   const fit = catalog.fits.find((f) => f.id === d.fitId);
   const fabric = product?.fabrics.find((f) => f.id === d.fabricId);
   const color = catalog.colors.find((c) => c.id === d.bodyColorId);
+  const trims = trimsOf(product, d);
+  const ownHex = d.customColorHex ? bodyHex(catalog, d) : null;
   const sizes = effectiveSizes(item.order, d.personalization);
   const people = needsRoster(d.personalization) ? item.order.roster : [];
   const sample = people.find((r) => r.name || r.number);
@@ -122,6 +125,8 @@ function ItemSection({ item, index, count, catalog }: { item: OrderItem; index: 
               ["Fit", fit ? tr(fit.name, "en") : d.fitId],
               ["Fabric weight", `${d.gsm} GSM`],
               ["Fabric", fabric ? tr(fabric.name, "en") : d.fabricId],
+              ...(canRemoveCuffs(product, d.sleeve) ? [["Sleeve ends", trims.cuffs ? "Rib cuffs" : "NO CUFFS (plain open hem)"]] : []),
+              ...(canRemoveWaistband(product) ? [["Bottom", trims.waistband ? "Rib waistband" : "NO WAISTBAND (straight hem)"]] : []),
             ].map(([k, v]) => (
               <tr key={k}>
                 <th className="py-0.5 pe-4 text-start font-normal text-neutral-500">{k}</th>
@@ -131,8 +136,12 @@ function ItemSection({ item, index, count, catalog }: { item: OrderItem; index: 
             <tr>
               <th className="py-0.5 pe-4 text-start font-normal text-neutral-500">Color</th>
               <td className="py-0.5 font-semibold">
-                <span className="me-2 inline-block h-3.5 w-3.5 rounded-sm border border-neutral-400 align-[-2px]" style={{ background: color?.hex }} aria-hidden />
-                {color ? `${tr(color.name, "en")} (${color.hex.toUpperCase()})` : d.bodyColorId}
+                <span className="me-2 inline-block h-3.5 w-3.5 rounded-sm border border-neutral-400 align-[-2px]" style={{ background: ownHex ?? color?.hex }} aria-hidden />
+                {ownHex
+                  ? `CUSTOMER'S OWN COLOR ${ownHex} (closest we stock: ${color ? `${tr(color.name, "en")} ${color.hex.toUpperCase()}` : d.bodyColorId}). Confirm before production.`
+                  : color
+                    ? `${tr(color.name, "en")} (${color.hex.toUpperCase()})`
+                    : d.bodyColorId}
               </td>
             </tr>
           </tbody>

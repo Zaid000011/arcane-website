@@ -7,6 +7,7 @@ import type { PrintSamples } from "@/lib/three/print-layers";
 import { drawNamesList, drawNeckLabel, drawPersonalText, drawPrintRect, placeholderCanvas, type PatchStyle } from "@/lib/three/print-canvas";
 import { clamp01, encode, garmentLut, LIN, LUT_STEPS, SHADE_MAX, shoulder, smoothstep } from "./shade";
 import { garmentPhoto, labelOnPhoto, photoUrl, placeOnPhoto, placePrintOnPhoto, type GarmentPhoto, type PhotoQuad, type PhotoView, type Pt } from "./photos";
+import { bodyHex, trimsOf } from "@/lib/design/options";
 
 /**
  * Draws a design on a real garment photo, in the browser:
@@ -448,9 +449,9 @@ export async function composeGarmentPhoto(o: ComposeOptions): Promise<Composed |
   const { catalog } = o;
   const design = withFreePrints(catalog, o.design);
   const product = catalog.products.find((p) => p.id === design.productId) ?? catalog.products[0]!;
-  const photo = garmentPhoto(product.mockup, design.sleeve, o.view);
+  const photo = garmentPhoto(product.mockup, design.sleeve, o.view, trimsOf(product, design));
   if (!photo || o.width < 2 || o.height < 2) return null;
-  const color = catalog.colors.find((c) => c.id === design.bodyColorId)?.hex ?? "#151515";
+  const color = bodyHex(catalog, design);
   const pad = o.pad ?? DEFAULT_PAD;
 
   const basePromise = getBase(photo, color, Math.round(o.width), Math.round(o.height), pad);

@@ -7,13 +7,11 @@ import { Modal } from "@/components/ui/Modal";
 import { tr } from "@/lib/catalog";
 import type { Catalog, FabricKind, PrintMethod } from "@/lib/catalog/types";
 import { artFrom, closeUpFabric, closeUpSize, sampleArt, useCloseUp } from "@/lib/closeup/client";
+import { bodyHex } from "@/lib/design/options";
+import { printPhotoUrl } from "@/lib/print-photos";
 import type { DesignSelection } from "@/lib/pricing/types";
-import { STATIC_ROOT } from "@/lib/site-mode";
 import { useI18n } from "@/i18n/client";
 import { fmt } from "@/i18n/format";
-
-/** Real close-up photos of each print type (public/print-types). Methods added later fall back to a drawn close-up. */
-const PHOTOS = new Set(["dtf", "dtg", "screen", "puff", "embroidery", "embroidery3d", "sublimation", "vinyl", "vinylSpecial", "wovenPatch", "chenillePatch"]);
 
 /** Every print method explained, each with a real close-up photo of how it looks on fabric. */
 export function PrintTypesDialog({ open, onClose, catalog, design }: { open: boolean; onClose: () => void; catalog: Catalog; design: DesignSelection }) {
@@ -21,7 +19,7 @@ export function PrintTypesDialog({ open, onClose, catalog, design }: { open: boo
   const t = dict.designer;
   const product = catalog.products.find((p) => p.id === design.productId);
   const fabric = product?.fabrics.find((f) => f.id === design.fabricId) ?? product?.fabrics[0] ?? { id: "cotton", kind: "cotton" as FabricKind };
-  const color = catalog.colors.find((c) => c.id === design.bodyColorId)?.hex ?? "#151515";
+  const color = bodyHex(catalog, design);
 
   return (
     <Modal open={open} onClose={onClose} title={t.printTypesTitle} closeLabel={t.close} wide>
@@ -46,26 +44,21 @@ export function PrintTypesDialog({ open, onClose, catalog, design }: { open: boo
 function MethodCard({ method, fabric, color }: { method: PrintMethod; fabric: { id: string; kind: FabricKind }; color: string }) {
   const { locale, dict } = useI18n();
   const t = dict.designer;
-  const photo = PHOTOS.has(method.id);
+  const photoUrl = printPhotoUrl(method.id);
   const base = closeUpFabric(method, fabric, color);
   const size = closeUpSize(104, 224);
-  const key = photo ? null : `${method.id}|${base.fabricId}|${base.kind}|${base.color}|${size}|sample`;
+  const key = photoUrl ? null : `${method.id}|${base.fabricId}|${base.kind}|${base.color}|${size}|sample`;
   const image = useCloseUp(key, async () => ({
     key: `print|${key}`,
     job: { type: "print", methodId: method.id, fabricId: base.fabricId, kind: base.kind, color: base.color, size, art: artFrom(sampleArt(method.id, base.color, size), size) },
   }));
-  const { traits } = method;
-  const notes = [
-    method.fabricKinds?.length === 1 && method.fabricKinds[0] === "cotton" ? t.cottonOnly : null,
-    method.lightGarmentsOnly ? t.lightPolyOnly : null,
-  ].filter(Boolean);
 
   return (
-    <li className={`rounded-2xl border border-line bg-ink/50 ${photo ? "overflow-hidden" : "flex gap-4 p-4"}`}>
-      {photo ? (
+    <li className={`rounded-2xl border border-line bg-ink/50 ${photoUrl ? "overflow-hidden" : "flex gap-4 p-4"}`}>
+      {photoUrl ? (
         // eslint-disable-next-line @next/next/no-img-element
         <img
-          src={`${STATIC_ROOT}/print-types/${method.id}.webp`}
+          src={photoUrl}
           alt={fmt(t.printPhotoAlt, { name: tr(method.name, locale) })}
           width={720}
           height={720}
@@ -78,44 +71,61 @@ function MethodCard({ method, fabric, color }: { method: PrintMethod; fabric: { 
           <span className="lens-glare" />
         </div>
       )}
-      <div className={`min-w-0 flex-1 ${photo ? "p-4" : ""}`}>
-        <div className="flex items-baseline justify-between gap-2">
-          <h3 className="font-serif text-lg font-bold text-gold">{tr(method.name, locale)}</h3>
-          <span className="shrink-0 text-xs font-semibold text-cream" dir="ltr" title={`${t.priceLevel}: ${t.priceLevels[traits.priceLevel - 1] ?? ""}`}>
-            {"$$$".slice(0, traits.priceLevel)}
-            <span className="opacity-30">{"$$$".slice(traits.priceLevel)}</span>
-          </span>
-        </div>
-        <p className="mt-1 text-sm leading-relaxed text-cream-muted">{tr(method.description, locale)}</p>
-        <dl className="mt-3 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-xs">
-          <dt className="text-cream-muted">{t.feel}</dt>
-          <dd className="text-cream">{tr(traits.feel, locale)}</dd>
-          <dt className="text-cream-muted">{t.bestFor}</dt>
-          <dd className="text-cream">{tr(traits.bestFor, locale)}</dd>
-          <dt className="text-cream-muted">{t.durability}</dt>
-          <dd className="flex items-center gap-1" aria-label={fmt(t.durabilityValue, { n: traits.durability })}>
-            {[1, 2, 3, 4, 5].map((n) => (
-              <span key={n} className={`h-1.5 w-4 rounded-full ${n <= traits.durability ? "bg-gold" : "bg-line"}`} aria-hidden />
-            ))}
-          </dd>
-          <dt className="text-cream-muted">{t.minimum}</dt>
-          <dd className="text-cream">{method.minQty > 1 ? fmt(t.minPieces, { n: method.minQty }) : t.noMinimum}</dd>
-        </dl>
-        {notes.length || method.extraDays > 0 ? (
-          <p className="mt-2 flex flex-wrap gap-1.5">
-            {notes.map((n) => (
-              <span key={n} className="inline-flex items-center gap-1 rounded-full bg-arcane/50 px-2 py-0.5 text-[11px] text-cream">
-                <Info className="h-3 w-3" aria-hidden /> {n}
-              </span>
-            ))}
-            {method.extraDays > 0 ? (
-              <span className="inline-flex items-center gap-1 rounded-full border border-line px-2 py-0.5 text-[11px] text-cream-muted">
-                <Clock className="h-3 w-3" aria-hidden /> {fmt(t.extraDays, { n: method.extraDays })}
-              </span>
-            ) : null}
-          </p>
-        ) : null}
+      <div className={`min-w-0 flex-1 ${photoUrl ? "p-4" : ""}`}>
+        <MethodDetails method={method} />
       </div>
     </li>
+  );
+}
+
+/** What a print type is like: name, price level, description, feel, best use, durability, minimum and notes. */
+export function MethodDetails({ method }: { method: PrintMethod }) {
+  const { locale, dict } = useI18n();
+  const t = dict.designer;
+  const { traits } = method;
+  const notes = [
+    method.fabricKinds?.length === 1 && method.fabricKinds[0] === "cotton" ? t.cottonOnly : null,
+    method.lightGarmentsOnly ? t.lightPolyOnly : null,
+  ].filter((n): n is string => Boolean(n));
+
+  return (
+    <>
+      <div className="flex items-baseline justify-between gap-2">
+        <h3 className="font-serif text-lg font-bold text-gold">{tr(method.name, locale)}</h3>
+        <span className="shrink-0 text-xs font-semibold text-cream" dir="ltr" title={`${t.priceLevel}: ${t.priceLevels[traits.priceLevel - 1] ?? ""}`}>
+          {"$$$".slice(0, traits.priceLevel)}
+          <span className="opacity-30">{"$$$".slice(traits.priceLevel)}</span>
+        </span>
+      </div>
+      <p className="mt-1 text-sm leading-relaxed text-cream-muted">{tr(method.description, locale)}</p>
+      <dl className="mt-3 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-xs">
+        <dt className="text-cream-muted">{t.feel}</dt>
+        <dd className="text-cream">{tr(traits.feel, locale)}</dd>
+        <dt className="text-cream-muted">{t.bestFor}</dt>
+        <dd className="text-cream">{tr(traits.bestFor, locale)}</dd>
+        <dt className="text-cream-muted">{t.durability}</dt>
+        <dd className="flex items-center gap-1" aria-label={fmt(t.durabilityValue, { n: traits.durability })}>
+          {[1, 2, 3, 4, 5].map((n) => (
+            <span key={n} className={`h-1.5 w-4 rounded-full ${n <= traits.durability ? "bg-gold" : "bg-line"}`} aria-hidden />
+          ))}
+        </dd>
+        <dt className="text-cream-muted">{t.minimum}</dt>
+        <dd className="text-cream">{method.minQty > 1 ? fmt(t.minPieces, { n: method.minQty }) : t.noMinimum}</dd>
+      </dl>
+      {notes.length || method.extraDays > 0 ? (
+        <p className="mt-2 flex flex-wrap gap-1.5">
+          {notes.map((n) => (
+            <span key={n} className="inline-flex items-center gap-1 rounded-full bg-arcane/50 px-2 py-0.5 text-[11px] text-cream">
+              <Info className="h-3 w-3" aria-hidden /> {n}
+            </span>
+          ))}
+          {method.extraDays > 0 ? (
+            <span className="inline-flex items-center gap-1 rounded-full border border-line px-2 py-0.5 text-[11px] text-cream-muted">
+              <Clock className="h-3 w-3" aria-hidden /> {fmt(t.extraDays, { n: method.extraDays })}
+            </span>
+          ) : null}
+        </p>
+      ) : null}
+    </>
   );
 }

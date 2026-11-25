@@ -3,6 +3,7 @@ import type { DesignSelection, PrintSelection } from "@/lib/pricing/types";
 import { normalizePersonalization } from "./personalization";
 import { constrainToPanel, fitToMethod, isPrintSide, MAX_PRINTS_PER_SIDE, migrateLegacyPrint, newPrintId, panelBox, printTier, sidesFor, type LegacyPrint, type PrintSide } from "./sides";
 import type { DesignElement } from "./types";
+import { canRemoveCuffs, canRemoveWaistband, HEX_COLOR } from "./options";
 
 /** Pure helpers that keep a design valid as the customer changes options. */
 
@@ -113,6 +114,9 @@ export function normalizeDesign(catalog: Catalog, d: Partial<DesignSelection>): 
   const fabricId = product.fabrics.some((f) => f.id === d.fabricId) ? d.fabricId! : product.defaultFabricId;
   const colorOk = (id: string | undefined) => catalog.colors.some((c) => c.id === id && c.inStock);
   const bodyColorId = colorOk(d.bodyColorId) ? d.bodyColorId! : base.bodyColorId;
+  const customColorHex = d.customColorHex && HEX_COLOR.test(d.customColorHex) ? d.customColorHex.toUpperCase() : undefined;
+  const noCuffs = Boolean(d.noCuffs) && canRemoveCuffs(product, sleeve);
+  const noWaistband = Boolean(d.noWaistband) && canRemoveWaistband(product);
   // Separate part colors (hood lining, strings, cuffs…) are no longer offered: everything matches the body.
   const partColors: Record<string, string> = {};
   const sides = sidesFor(product.mockup);
@@ -133,6 +137,9 @@ export function normalizeDesign(catalog: Catalog, d: Partial<DesignSelection>): 
     gsm,
     fabricId,
     bodyColorId,
+    ...(customColorHex ? { customColorHex } : {}),
+    ...(noCuffs ? { noCuffs } : {}),
+    ...(noWaistband ? { noWaistband } : {}),
     partColors,
     prints,
     personalization: normalizePersonalization(product, { ...base.personalization, ...d.personalization }),

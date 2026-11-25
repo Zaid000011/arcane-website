@@ -24,7 +24,7 @@ function usePlainPhoto(catalog: Catalog, design: DesignSelection, side: string):
   const [photo, setPhoto] = useState<PlainPhoto | null>(null);
   const view = sideView(side);
   const usable = view === "front" || view === "back";
-  const key = `${design.productId}|${design.sleeve}|${design.bodyColorId}|${view}`;
+  const key = `${design.productId}|${design.sleeve}|${design.bodyColorId}|${design.customColorHex ?? ""}|${view}`;
   useEffect(() => {
     if (!usable) {
       setPhoto(null);
@@ -50,7 +50,20 @@ function usePlainPhoto(catalog: Catalog, design: DesignSelection, side: string):
  * shown, the chosen one can be edited. Drag to move, corner square to
  * resize, top circle to rotate, snapping to the middle lines. Units are mm.
  */
-export function SideEditor({ catalog, design, print, bodyHex }: { catalog: Catalog; design: DesignSelection; print: PrintSelection; bodyHex: string }) {
+export function SideEditor({
+  catalog,
+  design,
+  print,
+  bodyHex,
+  onEditText,
+}: {
+  catalog: Catalog;
+  design: DesignSelection;
+  print: PrintSelection;
+  bodyHex: string;
+  /** A text was tapped twice: open it for typing. */
+  onEditText?: (elementId: string) => void;
+}) {
   const { locale, dict } = useI18n();
   const t = dict.designer;
   const product = catalog.products.find((p) => p.id === design.productId);
@@ -59,6 +72,8 @@ export function SideEditor({ catalog, design, print, bodyHex }: { catalog: Catal
   const pad = Math.max(box.w, box.h) * 0.06;
   const contentRef = useRef<SVGGElement>(null);
   const gesture = useRef<Gesture | null>(null);
+  const lastTap = useRef<{ id: string; at: number } | null>(null);
+  const editOnUp = useRef<string | null>(null);
   const [guides, setGuides] = useState({ v: false, h: false });
   const [pxPerMm, setPxPerMm] = useState(1);
   const clipId = `side-clip-${useId().replace(/[^a-zA-Z0-9_-]/g, "")}`;
@@ -100,6 +115,16 @@ export function SideEditor({ catalog, design, print, bodyHex }: { catalog: Catal
   const onElementDown = (e: ReactPointerEvent<SVGGElement>, owner: PrintSelection, el: DesignElement) => {
     e.stopPropagation();
     useDesignStore.getState().select({ printId: owner.id, elementId: el.id });
+    // A second tap on the same text opens it for typing. The box is focused when the finger lifts,
+    // which is when phones (iPhones especially) agree to show the keyboard.
+    const now = e.timeStamp;
+    const twice = lastTap.current && lastTap.current.id === el.id && now - lastTap.current.at < 450;
+    lastTap.current = { id: el.id, at: now };
+    if (twice && el.type === "text" && owner.id === print.id && onEditText) {
+      lastTap.current = null;
+      editOnUp.current = el.id;
+      return;
+    }
     if (el.locked || owner.id !== print.id) return;
     const p = toLocal(e);
     if (p) start(e, { kind: "move", id: el.id, start: p, origin: { x: el.x, y: el.y } });
@@ -139,6 +164,9 @@ export function SideEditor({ catalog, design, print, bodyHex }: { catalog: Catal
   const onUp = () => {
     gesture.current = null;
     setGuides({ v: false, h: false });
+    const edit = editOnUp.current;
+    editOnUp.current = null;
+    if (edit) onEditText?.(edit);
   };
 
   // Where the garment photo goes, in the panel's millimetres.

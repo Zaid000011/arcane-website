@@ -71,9 +71,11 @@ const base: Record<MockupId, GarmentSpec> = {
   },
 };
 
-/** Shape for a garment, adjusted for the fit (oversized and boxy are wider). */
-export function specFor(mockup: MockupId, fitId: string): GarmentSpec {
+/** Shape for a garment, adjusted for the fit (oversized and boxy are wider) and with any rib trims the customer took off. */
+export function specFor(mockup: MockupId, fitId: string, trims: { cuffs: boolean; waistband: boolean } = { cuffs: true, waistband: true }): GarmentSpec {
   const s = { ...base[mockup] };
+  if (!trims.cuffs) s.cuff = 0;
+  if (!trims.waistband) s.band = 0;
   if (fitId === "oversized") {
     s.chestHalf += 2.5;
     s.hemHalf += 2.5;

@@ -17,10 +17,17 @@ export interface PlainPhoto {
 const plainCache = new Map<string, Promise<PlainPhoto | null>>();
 
 export function plainGarmentPhoto(catalog: Catalog, design: DesignSelection, view: PhotoView): Promise<PlainPhoto | null> {
-  const key = [design.productId, design.sleeve, design.bodyColorId, view].join("|");
+  const key = [design.productId, design.sleeve, design.bodyColorId, design.customColorHex ?? "", view].join("|");
   const hit = plainCache.get(key);
   if (hit) return hit;
-  const plain: DesignSelection = { ...design, prints: [], personalization: { names: false, numbers: false, namesList: false, neckLabel: false } };
+  // Behind the print editor only the chest or back shows, so the photo with cuffs and waistband is fine.
+  const plain: DesignSelection = {
+    ...design,
+    noCuffs: false,
+    noWaistband: false,
+    prints: [],
+    personalization: { names: false, numbers: false, namesList: false, neckLabel: false },
+  };
   const job = queue.then(async () => {
     const size = 1400;
     const result = await composeGarmentPhoto({ catalog, design: plain, view, width: size, height: size, pad: { top: 0.02, bottom: 0.02, side: 0.02 } });

@@ -45,6 +45,9 @@ export const designSchema = z.object({
   gsm: z.number().int().positive().max(2000),
   fabricId: id,
   bodyColorId: id,
+  customColorHex: z.string().regex(/^#[0-9A-Fa-f]{6}$/).optional(),
+  noCuffs: z.boolean().optional(),
+  noWaistband: z.boolean().optional(),
   partColors: z.record(id, id).refine((r) => Object.keys(r).length <= 20),
   prints: z
     .array(

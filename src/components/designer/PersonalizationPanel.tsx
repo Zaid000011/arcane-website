@@ -13,6 +13,7 @@ import { useI18n } from "@/i18n/client";
 import { fmt, formatMoney } from "@/i18n/format";
 import { FieldLabel, Swatch } from "./controls";
 import type { PanelProps } from "./panels";
+import { bodyHex as bodyColorHex } from "@/lib/design/options";
 
 export function PersonalizationPanel({ catalog, design, product, update }: PanelProps) {
   const { locale, dict } = useI18n();
@@ -21,7 +22,7 @@ export function PersonalizationPanel({ catalog, design, product, update }: Panel
   const p = design.personalization;
   const fees = catalog.personalization;
   const money = (n: number) => formatMoney(n, locale);
-  const bodyHex = catalog.colors.find((c) => c.id === design.bodyColorId)?.hex ?? "#151515";
+  const bodyHex = bodyColorHex(catalog, design);
   const ink = isLightHex(bodyHex) ? "#151515" : "#F5EBD8";
 
   const showArea = (areaId: string | undefined) => {

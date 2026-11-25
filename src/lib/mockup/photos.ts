@@ -3,6 +3,7 @@ import { placementOf } from "@/lib/design/placement";
 import type { RectPlacement } from "@/lib/design/sides";
 import { STATIC_ROOT } from "@/lib/site-mode";
 import { PHOTO_DATA } from "./photo-data";
+import { FULL_TRIMS, trimsKey, type GarmentTrims } from "@/lib/design/options";
 
 /**
  * Real-looking garment photos: one white garment photographed from the front
@@ -60,15 +61,16 @@ export function photoViewFor(view: string): PhotoView {
   return view === "back" ? "back" : "front";
 }
 
-export function garmentPhoto(mockup: MockupId, sleeve: Sleeve, view: PhotoView): GarmentPhoto | null {
-  const name = `${mockup}-${sleeve}-${view}`;
+export function garmentPhoto(mockup: MockupId, sleeve: Sleeve, view: PhotoView, trims: GarmentTrims = FULL_TRIMS): GarmentPhoto | null {
+  const name = `${mockup}-${sleeve}${trimsKey(trims)}-${view}`;
   const data = PHOTO_DATA[name];
   return data ? { ...data, name, mockup, sleeve, view } : null;
 }
 
 /** True when this garment has both a front and a back photo. */
-export function hasPhotos(mockup: MockupId, sleeve: Sleeve): boolean {
-  return Boolean(PHOTO_DATA[`${mockup}-${sleeve}-front`] && PHOTO_DATA[`${mockup}-${sleeve}-back`]);
+export function hasPhotos(mockup: MockupId, sleeve: Sleeve, trims: GarmentTrims = FULL_TRIMS): boolean {
+  const base = `${mockup}-${sleeve}${trimsKey(trims)}`;
+  return Boolean(PHOTO_DATA[`${base}-front`] && PHOTO_DATA[`${base}-back`]);
 }
 
 /** The photo file: the big one for the designer, a small one for little pictures. */

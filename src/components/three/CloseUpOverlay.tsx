@@ -5,13 +5,15 @@ import { useEffect, useRef, useState } from "react";
 import { CloseUpCanvas } from "@/components/closeup/CloseUpCanvas";
 import { tr } from "@/lib/catalog";
 import type { Catalog, FabricOption } from "@/lib/catalog/types";
-import { artFrom, closeUpFabric, closeUpSize, cropArt, sampleArt, useCloseUp } from "@/lib/closeup/client";
+import { artFrom, closeUpFabric, closeUpSize, fitArt, sampleArt, useCloseUp } from "@/lib/closeup/client";
 import { hasDistinctInside } from "@/lib/closeup/surface";
 import { useMeasureStore } from "@/lib/design/measure-store";
 import { isPrintSide, panelBox, printRenderRect } from "@/lib/design/sides";
 import type { DesignSelection, PrintSelection } from "@/lib/pricing/types";
+import { printPhotoUrl } from "@/lib/print-photos";
 import { useI18n } from "@/i18n/client";
 import { fmt } from "@/i18n/format";
+import { bodyHex } from "@/lib/design/options";
 
 /** What the close-up shows: the fabric under a magnifying glass, or one print area pulled out into a circle. */
 export type CloseUpView = { type: "fabric" } | { type: "print"; printId: string };
@@ -33,7 +35,7 @@ const PATCHES: Record<string, "woven" | "chenille"> = { wovenPatch: "woven", che
 export function CloseUpOverlay({ target, view, catalog, design }: { target: CloseUpTarget; view: CloseUpView; catalog: Catalog; design: DesignSelection }) {
   const product = catalog.products.find((p) => p.id === design.productId);
   const fabric = product?.fabrics.find((f) => f.id === design.fabricId) ?? product?.fabrics[0];
-  const color = catalog.colors.find((c) => c.id === design.bodyColorId)?.hex ?? "#151515";
+  const color = bodyHex(catalog, design);
   if (!fabric) return null;
   return (
     <div className="pointer-events-none absolute inset-0 overflow-hidden [container-type:size]" aria-hidden>
@@ -142,22 +144,29 @@ function PrintCallout({
   const lines = useRef<SVGGElement>(null);
   const [diameter, setDiameter] = useState(180);
 
-  // Draw it on a fabric the method really works on (sublimation needs light polyester, DTG needs cotton).
+  // The customer's own artwork, drawn up close in the print type's finish, on a fabric the method really works on
+  // (sublimation needs light polyester, DTG needs cotton). Only while the print is still empty does the real photo
+  // of the print type show instead, as in "Print types explained".
+  const photo = own ? null : printPhotoUrl(print.methodId);
   const base = method ? closeUpFabric(method, fabric, color) : { fabricId: fabric.id, kind: fabric.kind, color };
   const size = closeUpSize(diameter);
   const artKey = own ? hashString(JSON.stringify(elements)) : "sample";
-  const key = `${print.methodId}|${base.fabricId}|${base.kind}|${base.color}|${size}|${artKey}`;
+  const key = photo ? null : `${print.methodId}|${base.fabricId}|${base.kind}|${base.color}|${size}|${artKey}`;
   const image = useCloseUp(key, async () => {
     let art: HTMLCanvasElement | null = null;
+    let viewMm: number | undefined;
     if (own && product && isPrintSide(print.areaId)) {
       const { drawPrintRect } = await import("@/lib/three/print-canvas");
       const patch = PATCHES[print.methodId] ?? null;
       const rect = printRenderRect(elements, panelBox(product.mockup, design.sleeve, print.areaId), useMeasureStore.getState().measurements, patch ? 6 : 2);
       const full = await drawPrintRect(elements, rect, patch);
-      art = cropArt(full, rect.w, rect.h, size);
+      // The whole design, so what's written can be read, in this print type's finish.
+      const fitted = fitArt(full, rect.w, rect.h, size);
+      art = fitted.canvas;
+      viewMm = fitted.viewMm;
     }
     art ??= sampleArt(print.methodId, base.color, size);
-    return { key: `print|${key}`, job: { type: "print", methodId: print.methodId, fabricId: base.fabricId, kind: base.kind, color: base.color, size, art: artFrom(art, size) } };
+    return { key: `print|${key}`, job: { type: "print", methodId: print.methodId, fabricId: base.fabricId, kind: base.kind, color: base.color, size, art: artFrom(art, size), ...(viewMm ? { viewMm } : {}) } };
   });
 
   // Follow the print area while the garment turns: the small ring sits on it and two lines stretch out to the big circle.
@@ -231,13 +240,18 @@ function PrintCallout({
       </svg>
       <div ref={box} className="absolute top-0 left-0" style={{ width: 0, height: 0 }}>
         <div className="closeup-pop lens-glass h-full w-full overflow-hidden rounded-full">
-          <CloseUpCanvas image={image} />
+          {photo ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img key={photo} src={photo} alt="" className="h-full w-full object-cover" />
+          ) : (
+            <CloseUpCanvas image={image} />
+          )}
           <span className="lens-glare" />
         </div>
       </div>
       <p ref={caption} className="absolute top-0 left-0 w-max max-w-[60cqw] rounded-full border border-gold/40 bg-ink/85 px-2.5 py-1 text-center text-[11px] leading-tight font-semibold text-gold-light shadow-lg">
         {fmt(t.upClose, { name: method ? tr(method.name, locale) : "" })}
-        <span className="block text-[10px] font-normal text-cream-muted">{own ? t.yourDesign : t.exampleDesign}</span>
+        <span className="block text-[10px] font-normal text-cream-muted">{photo ? t.realPhoto : own ? t.yourDesign : t.exampleDesign}</span>
       </p>
     </>
   );

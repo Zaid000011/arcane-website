@@ -107,6 +107,8 @@ const baseCatalog: Omit<Catalog, "sizeCharts"> = {
       // No back-neck print: the hood covers it.
       printAreaIds: [...topAreas.filter((a) => a !== "backNeck"), "hood"],
       mockup: "hoodie",
+      ribCuffs: true,
+      ribWaistband: true,
     },
     {
       id: "tshirt",
@@ -139,6 +141,8 @@ const baseCatalog: Omit<Catalog, "sizeCharts"> = {
       colorPartIds: ["hoodLining", "drawstrings", "cuffs", "pocket", "zipper"],
       printAreaIds: ["leftChest", "rightChest", "backUpper", "fullBack", "leftSleeve", "rightSleeve", "hood", "backNeck"],
       mockup: "zipHoodie",
+      ribCuffs: true,
+      ribWaistband: true,
     },
     {
       id: "sweatshirt",
@@ -155,6 +159,8 @@ const baseCatalog: Omit<Catalog, "sizeCharts"> = {
       colorPartIds: ["cuffs"],
       printAreaIds: topAreas,
       mockup: "sweatshirt",
+      ribCuffs: true,
+      ribWaistband: true,
     },
     {
       id: "polo",
@@ -186,6 +192,7 @@ const baseCatalog: Omit<Catalog, "sizeCharts"> = {
       colorPartIds: ["poloCollar"],
       printAreaIds: ["leftChest", "rightChest", "backUpper", "fullBack", "leftSleeve", "rightSleeve", "backNeck"],
       mockup: "polo",
+      ribCuffs: true,
     },
     {
       id: "varsity",
@@ -213,6 +220,8 @@ const baseCatalog: Omit<Catalog, "sizeCharts"> = {
       colorPartIds: ["varsitySleeves", "varsityRibbing"],
       printAreaIds: ["leftChest", "rightChest", "backUpper", "fullBack", "leftSleeve", "rightSleeve"],
       mockup: "varsity",
+      ribCuffs: true,
+      ribWaistband: true,
     },
   ],
 
