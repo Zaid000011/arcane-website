@@ -49,6 +49,8 @@ export const designSchema = z.object({
   prints: z
     .array(
       z.object({
+        /** Missing on designs saved before prints could go anywhere; they're converted when read. */
+        id: id.optional(),
         areaId: id,
         methodId: id,
         tier: z.enum(["S", "M", "L", "AO"]),
@@ -56,7 +58,7 @@ export const designSchema = z.object({
         elements: z.array(element).max(30).optional(),
       }),
     )
-    .max(12),
+    .max(30),
   personalization: z.object({
     names: z.boolean(),
     numbers: z.boolean(),

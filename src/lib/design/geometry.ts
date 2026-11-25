@@ -1,4 +1,5 @@
 import type { PrintArea, SizeTier } from "@/lib/catalog/types";
+import { fontById } from "./fonts";
 import type { DesignElement, ImageElement } from "./types";
 
 /** Print box size in mm. */
@@ -35,8 +36,8 @@ export function elementBBox(el: DesignElement, measured?: LocalBBox): LocalBBox 
   }
   if (el.type === "clipart") return { x: -el.w / 2, y: -el.w / 2, w: el.w, h: el.w };
   if (measured) return measured;
-  // Rough estimate until the browser has measured the real text.
-  const w = Math.max(1, el.text.length) * el.size * 0.62;
+  // Estimate from the font's measured letter width (used until the browser measures the real text, and for prices).
+  const w = Math.max(1, el.text.length) * el.size * (fontById(el.fontId).widthEm + Math.max(0, el.letterSpacing));
   return { x: -w / 2, y: -el.size * 0.6, w, h: el.size * 1.2 };
 }
 

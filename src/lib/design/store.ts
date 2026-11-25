@@ -11,7 +11,9 @@ export type DesignerStep = "garment" | "fabric" | "colors" | "prints" | "names" 
 export const DESIGNER_STEPS: DesignerStep[] = ["garment", "fabric", "colors", "prints", "names", "sizes", "review"];
 
 export interface Selection {
-  areaId: string;
+  /** The print being edited. */
+  printId: string;
+  /** The piece of artwork in it, if one is picked. */
   elementId: string | null;
 }
 

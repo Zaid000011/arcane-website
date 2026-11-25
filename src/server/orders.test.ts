@@ -4,7 +4,7 @@ import path from "node:path";
 import { beforeEach, describe, expect, it } from "vitest";
 import { seedCatalog } from "@/lib/catalog/seed";
 import { addElement, newImageElement } from "@/lib/design/elements";
-import { defaultDesign, togglePrint } from "@/lib/design/logic";
+import { addPrint, defaultDesign } from "@/lib/design/logic";
 import { togglePersonal } from "@/lib/design/personalization";
 import { checkoutSchema, type CheckoutInput } from "@/lib/validation";
 import { saveAsset } from "./assets";
@@ -118,9 +118,9 @@ describe("placing an order", () => {
   });
 
   it("needs uploaded artwork to be on the server", () => {
-    let design = togglePrint(seedCatalog, defaultDesign(seedCatalog, "hoodie"), "frontCenter");
+    const added = addPrint(seedCatalog, defaultDesign(seedCatalog, "hoodie"), "front");
     const img = newImageElement({ w: 210, h: 300 }, { assetId: "order-asset-0001", name: "logo.png", pxW: 3000, pxH: 3000, vector: false });
-    design = addElement(seedCatalog, design, "frontCenter", img);
+    const design = addElement(seedCatalog, added.design, added.printId!, img);
     const order = { sizes: { M: 2 }, roster: [], deliverySpeedId: "standard" };
     expect(fails(() => createOrder(input({ items: [{ design, order }] }), NOW))).toBe("missingAssets");
     saveAsset("order-asset-0001", PNG);

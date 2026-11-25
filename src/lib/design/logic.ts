@@ -1,24 +1,10 @@
-import { TIER_ORDER, tierAtMost } from "@/lib/catalog";
-import type { Catalog, PrintArea, SizeTier, Sleeve } from "@/lib/catalog/types";
+import type { Catalog, MockupId, Sleeve } from "@/lib/catalog/types";
 import type { DesignSelection, PrintSelection } from "@/lib/pricing/types";
-import { printBoxMm, rescaleElements } from "./geometry";
 import { normalizePersonalization } from "./personalization";
+import { constrainToPanel, fitToMethod, isPrintSide, MAX_PRINTS_PER_SIDE, migrateLegacyPrint, newPrintId, panelBox, printTier, sidesFor, type LegacyPrint, type PrintSide } from "./sides";
 import type { DesignElement } from "./types";
 
 /** Pure helpers that keep a design valid as the customer changes options. */
-
-export function maxTierFor(area: PrintArea, sleeve: Sleeve): SizeTier {
-  return sleeve === "short" && area.maxTierShortSleeve ? area.maxTierShortSleeve : area.maxTier;
-}
-
-/** Size tiers that fit the area and are offered by the method. */
-export function allowedTiers(catalog: Catalog, sleeve: Sleeve, areaId: string, methodId: string): SizeTier[] {
-  const area = catalog.printAreas.find((a) => a.id === areaId);
-  const method = catalog.printMethods.find((m) => m.id === methodId);
-  if (!area || !method) return [];
-  const max = maxTierFor(area, sleeve);
-  return TIER_ORDER.filter((t) => tierAtMost(t, max) && method.prices[t] !== undefined);
-}
 
 /** Why a method can't be used with the current fabric/color, or null if it can. */
 export function methodBlock(catalog: Catalog, design: DesignSelection, methodId: string): "fabric" | "lightColor" | null {
@@ -50,21 +36,18 @@ export function defaultDesign(catalog: Catalog, productId?: string): DesignSelec
 }
 
 /**
- * Fixes the size tier and color count for the area/method, and rescales the
- * artwork if the print box changed size (from `fromTier`).
+ * Keeps a print valid: the color count within the method's limit, the artwork
+ * on its panel and no bigger than the method allows, and the size tier
+ * worked out from the artwork.
  */
-function clampPrint(catalog: Catalog, sleeve: Sleeve, print: PrintSelection, fromTier: SizeTier = print.tier): PrintSelection {
-  const tiers = allowedTiers(catalog, sleeve, print.areaId, print.methodId);
-  const tier = tiers.includes(print.tier) ? print.tier : (tiers[tiers.length - 1] ?? print.tier);
+function clampPrint(catalog: Catalog, mockup: MockupId, sleeve: Sleeve, print: PrintSelection): PrintSelection {
   const method = catalog.printMethods.find((m) => m.id === print.methodId);
   const max = method?.maxColors ?? 1;
   const colorCount = method?.pricedPerColor ? Math.min(Math.max(1, Math.floor(print.colorCount ?? 1)), max) : undefined;
   let elements = sanitizeElements(print.elements);
-  const area = catalog.printAreas.find((a) => a.id === print.areaId);
-  if (area && elements.length > 0 && fromTier !== tier) {
-    elements = rescaleElements(elements, printBoxMm(area, fromTier), printBoxMm(area, tier));
-  }
-  return { areaId: print.areaId, methodId: print.methodId, tier, ...(colorCount ? { colorCount } : {}), elements };
+  if (isPrintSide(print.areaId)) elements = constrainToPanel(elements, panelBox(mockup, sleeve, print.areaId));
+  if (method) elements = fitToMethod(elements, method);
+  return { id: print.id, areaId: print.areaId, methodId: print.methodId, tier: printTier({ elements }), ...(colorCount ? { colorCount } : {}), elements };
 }
 
 /** Drops anything in saved data that isn't a well-formed element. */
@@ -82,6 +65,44 @@ function sanitizeElements(elements: unknown): DesignElement[] {
   });
 }
 
+/**
+ * Prints as saved: current ones carry an id; ones saved before prints could go
+ * anywhere were tied to a fixed area (left chest, full back…) and become free
+ * prints on that side, with the artwork where it was.
+ */
+function readPrints(catalog: Catalog, mockup: MockupId, sleeve: Sleeve, raw: unknown): PrintSelection[] {
+  if (!Array.isArray(raw)) return [];
+  const out: PrintSelection[] = [];
+  const ids = new Set<string>();
+  for (const [index, item] of raw.entries()) {
+    if (!item || typeof item !== "object") continue;
+    const p = item as Partial<PrintSelection>;
+    if (typeof p.areaId !== "string" || typeof p.methodId !== "string") continue;
+    let print: PrintSelection | null;
+    if (typeof p.id === "string" && p.id && isPrintSide(p.areaId)) {
+      print = { id: p.id, areaId: p.areaId, methodId: p.methodId, tier: p.tier ?? "S", colorCount: p.colorCount, elements: p.elements };
+    } else {
+      print = migrateLegacyPrint(catalog, mockup, sleeve, { ...(p as LegacyPrint), tier: p.tier ?? "M" }, `p-${p.areaId}-${index}`);
+    }
+    if (!print) continue;
+    if (ids.has(print.id)) print = { ...print, id: newPrintId() };
+    ids.add(print.id);
+    out.push(print);
+  }
+  return out;
+}
+
+/**
+ * The design with any prints saved the old way (tied to a fixed area) turned
+ * into free prints, and nothing else changed. For showing placed orders
+ * exactly as they were ordered.
+ */
+export function withFreePrints(catalog: Catalog, d: DesignSelection): DesignSelection {
+  if (d.prints.every((p) => p.id && isPrintSide(p.areaId))) return d;
+  const product = catalog.products.find((p) => p.id === d.productId);
+  return product ? { ...d, prints: readPrints(catalog, product.mockup, d.sleeve, d.prints) } : d;
+}
+
 /** Repairs anything that doesn't fit the current product (after switching products or loading a saved design). */
 export function normalizeDesign(catalog: Catalog, d: Partial<DesignSelection>): DesignSelection {
   const base = defaultDesign(catalog, d.productId);
@@ -94,15 +115,17 @@ export function normalizeDesign(catalog: Catalog, d: Partial<DesignSelection>): 
   const bodyColorId = colorOk(d.bodyColorId) ? d.bodyColorId! : base.bodyColorId;
   // Separate part colors (hood lining, strings, cuffs…) are no longer offered: everything matches the body.
   const partColors: Record<string, string> = {};
-  const seen = new Set<string>();
-  const prints = (d.prints ?? [])
+  const sides = sidesFor(product.mockup);
+  const perSide = new Map<string, number>();
+  const prints = readPrints(catalog, product.mockup, sleeve, d.prints)
     .filter((p) => {
-      if (!product.printAreaIds.includes(p.areaId) || seen.has(p.areaId)) return false;
+      if (!sides.includes(p.areaId as PrintSide)) return false;
       if (!catalog.printMethods.some((m) => m.id === p.methodId)) return false;
-      seen.add(p.areaId);
-      return true;
+      const count = (perSide.get(p.areaId) ?? 0) + 1;
+      perSide.set(p.areaId, count);
+      return count <= MAX_PRINTS_PER_SIDE;
     })
-    .map((p) => clampPrint(catalog, sleeve, p));
+    .map((p) => clampPrint(catalog, product.mockup, sleeve, p));
   return {
     ...base,
     sleeve,
@@ -117,7 +140,7 @@ export function normalizeDesign(catalog: Catalog, d: Partial<DesignSelection>): 
 }
 
 /**
- * Switches product but keeps choices that still apply (colors, prints on shared areas).
+ * Switches product but keeps choices that still apply (colors, prints on sides it also has).
  * Sleeve starts at the new product's default, since the old choice may not have been deliberate.
  */
 export function switchProduct(catalog: Catalog, d: DesignSelection, productId: string): DesignSelection {
@@ -133,23 +156,31 @@ export function switchProduct(catalog: Catalog, d: DesignSelection, productId: s
   });
 }
 
-/** Turns a print area on (with a sensible default method and size) or off. */
-export function togglePrint(catalog: Catalog, d: DesignSelection, areaId: string): DesignSelection {
-  if (d.prints.some((p) => p.areaId === areaId)) {
-    return { ...d, prints: d.prints.filter((p) => p.areaId !== areaId) };
-  }
-  const method =
-    catalog.printMethods.find((m) => !methodBlock(catalog, d, m.id) && allowedTiers(catalog, d.sleeve, areaId, m.id).length > 0) ??
-    catalog.printMethods[0]!;
-  const tiers = allowedTiers(catalog, d.sleeve, areaId, method.id);
-  const tier: SizeTier = tiers.includes("M") ? "M" : (tiers[tiers.length - 1] ?? "S");
-  const print: PrintSelection = { areaId, methodId: method.id, tier, ...(method.pricedPerColor ? { colorCount: 1 } : {}), elements: [] };
-  return { ...d, prints: [...d.prints, print] };
+/** The method a new print starts with: the first that works on this fabric and color. */
+function defaultMethod(catalog: Catalog, d: DesignSelection) {
+  return catalog.printMethods.find((m) => !methodBlock(catalog, d, m.id)) ?? catalog.printMethods[0]!;
 }
 
-export function updatePrint(catalog: Catalog, d: DesignSelection, areaId: string, patch: Partial<PrintSelection>): DesignSelection {
+/** Adds an empty print on a side. Returns the new print's id (null when the side is full or not on this garment). */
+export function addPrint(catalog: Catalog, d: DesignSelection, side: PrintSide): { design: DesignSelection; printId: string | null } {
+  const product = catalog.products.find((p) => p.id === d.productId);
+  if (!product || !sidesFor(product.mockup).includes(side)) return { design: d, printId: null };
+  if (d.prints.filter((p) => p.areaId === side).length >= MAX_PRINTS_PER_SIDE) return { design: d, printId: null };
+  const method = defaultMethod(catalog, d);
+  const print: PrintSelection = { id: newPrintId(), areaId: side, methodId: method.id, tier: "S", ...(method.pricedPerColor ? { colorCount: 1 } : {}), elements: [] };
+  return { design: { ...d, prints: [...d.prints, print] }, printId: print.id };
+}
+
+export function removePrint(d: DesignSelection, printId: string): DesignSelection {
+  return { ...d, prints: d.prints.filter((p) => p.id !== printId) };
+}
+
+/** Changes a print's method or ink colors. Artwork too big for a new method shrinks to fit it. */
+export function updatePrint(catalog: Catalog, d: DesignSelection, printId: string, patch: Partial<Pick<PrintSelection, "methodId" | "colorCount">>): DesignSelection {
+  const product = catalog.products.find((p) => p.id === d.productId);
+  if (!product) return d;
   return {
     ...d,
-    prints: d.prints.map((p) => (p.areaId === areaId ? clampPrint(catalog, d.sleeve, { ...p, ...patch, areaId }, p.tier) : p)),
+    prints: d.prints.map((p) => (p.id === printId ? clampPrint(catalog, product.mockup, d.sleeve, { ...p, ...patch }) : p)),
   };
 }

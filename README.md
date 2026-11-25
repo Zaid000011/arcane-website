@@ -41,7 +41,7 @@ The link works only while both are running, and it changes every time `npm run s
 
 The site also runs on GitHub Pages at https://zaid000011.github.io/arcane-website/ (Arabic under `/ar/`). GitHub Pages only serves files, so that copy has no server:
 - **Works there:** the home page, the designer (garment photos and 3D) with its close-ups, prices, the cart and "send it to us".
-- **Goes to WhatsApp instead:** the cart's checkout becomes "Order on WhatsApp", and "send it to us" opens WhatsApp. Both go to the number in `src/config/site.ts`.
+- **Goes to WhatsApp instead:** the cart's checkout becomes "Order on WhatsApp", and "send it to us" opens WhatsApp. Both go to the number in `src/config/site.ts`, and both first ask for the customer's number, which must be an Egyptian mobile number (010, 011, 012 or 015), like every form on the full site.
 - **Not there:** online checkout, group order links, order pages and the admin panel. Those need the full site with its server and database.
 
 To update it after changing the site, or prices in the admin panel, run `npm run pages:publish`. It builds both languages and uploads them to the `gh-pages` branch, and the link updates within a minute or two. `npm run pages` only builds it, into `.static-build/site`.
@@ -60,10 +60,13 @@ To update it after changing the site, or prices in the admin panel, run `npm run
 | English and Arabic text | `src/i18n/dictionaries/en.ts`, `src/i18n/dictionaries/ar.ts` |
 | Logo files | `public/brand/` |
 | 3D garment shapes (body, sleeves, hood, collars, pocket) | `src/lib/three/shape.ts` (sizes), `src/lib/three/garment.ts` (parts and fabric) |
-| Where prints sit on the garment (used by the 3D view and the workshop sheet) | `src/lib/design/placement.ts` |
+| The printable part of each side (front, back, sleeves, hood) and how a print's size sets its price tier | `src/lib/design/sides.ts` |
+| Where names, numbers and the names list can go (used by the 3D view, the photos and the workshop sheet) | `src/lib/design/placement.ts` |
 | How each print method looks in 3D (puff height, thread, shine) | `src/lib/three/print-layers.ts` |
 | Garment photos and where prints sit on them | Originals in `mockups-src/` (2048 px PNGs, kept out of git), points measured on them in `scripts/mockup-landmarks.json`. Then run `npm run mockups`: it writes `public/mockups/` and `src/lib/mockup/photo-data.ts` |
 | How each print method looks on the photos (soaks in, shine, raised edges, thread) | `LOOKS` in `src/lib/mockup/compose.ts` |
+| Real 3D garment models (every garment except the zip hoodie) | AI models in `public/models/` (made smaller by `node scripts/shrink-glb.mjs`; originals in `mockups-src/models/`). Where prints land on each is measured in `MODELS` in `src/lib/three/model.ts`; `node scripts/model-frames.mjs public/models/<name>.glb` works that out for a new model from the photos it was made from |
+| The close-up photos in "Print types explained" | `public/print-types/<print type id>.webp` (originals in `mockups-src/print-types/`) |
 
 ## How it's built
 
@@ -72,6 +75,7 @@ To update it after changing the site, or prices in the admin panel, run `npm run
 - English by default, Arabic with right-to-left layout through the header toggle (saved in a cookie)
 - The design in progress is saved in the browser, so it survives a refresh. Uploaded images are kept in the browser's IndexedDB (`src/lib/design/assets.ts`) until checkout uploads them
 - Artwork is stored in millimetres inside each print box (`src/lib/design/geometry.ts`), so print files can be produced at real size later
+- Prints go anywhere (`src/lib/design/sides.ts`). Each garment has sides (front, back, both sleeves, and the hood on hoodies), each with a printable panel. A side can hold up to 6 prints, and each print's artwork can be dragged and resized anywhere on its panel, in an editor drawn on the garment's own photo. A print's size sets its price: up to 10 × 10 cm Small, up to A4 Medium, up to A3 Large, bigger All-over (only print types priced that big). The size comes from the artwork itself, worked out the same way in the browser and on the server, so the price can't be changed in the browser. Text is sized from each font's measured letter width. Designs saved before this (prints tied to fixed areas like "left chest") are converted on loading, with the artwork kept where it was; placed orders show exactly as ordered.
 - The designer opens on real garment photos (`src/lib/mockup/`), with a Photo | 3D switch:
   - Each garment and sleeve length has a front and a back photo of a white garment (made with AI image generation, hood raised on hoodie backs so names on the upper back show).
   - The browser turns each photo into a map of light and shadow and lays the chosen color under it, so folds, seams and knit texture stay as photographed. Dark colors get deeper folds and a soft sheen, like black cotton in a real product photo.
@@ -86,6 +90,8 @@ To update it after changing the site, or prices in the admin panel, run `npm run
 - Group orders are saved on the server in SQLite through Node's built-in `node:sqlite` (`.data/arcane.db`, uploaded images in `.data/assets/`). Organizer and member keys are stored hashed and travel in the link's `#` part, so they never appear in server request logs
 - Checkout has no accounts. Each order gets a private link (`/track/CODE#key=…`) where the customer uploads the payment screenshot, approves the design proof and follows progress. The server prices everything again, and orders, screenshots and proofs are only readable with the order key. Design and plan: [docs/checkout-design.md](docs/checkout-design.md)
 - "Send it to us" requests (`src/server/requests.ts`): a customer's own design (PNG, JPG, WEBP, SVG, PDF, AI, EPS or PSD, up to 5 files of 20 MB), a color code or a custom size, saved with their WhatsApp number. File types are checked from the file's content, files are private to the team, and design files download instead of opening, so they can't run anything on the site.
+- The 3D view uses a real AI-made 3D model when a garment has one (`src/lib/three/model.ts`), recolored with the same light-and-shadow math as the photos (`src/lib/mockup/shade.ts`). Each model was made from that garment's own front and back photos, so the 3D view matches the Photo view. Prints, names and numbers are pressed onto its surface as decals, placed from the same cm measurements. Every garment has one (hoodie, t-shirt and polo in both sleeves, sweatshirt, varsity jacket) except the zip hoodie, which still uses the drawn 3D garment; the drawn garment also shows for a moment while a model loads.
+- "Print types explained" shows a real close-up photo of each print type (made with AI), so customers see the actual difference.
 - Close-ups (`src/lib/closeup/`): drawn in code like a macro photo, in the garment's real color, in a background worker so the page never stutters. The fabric step shows a magnifying glass over the 3D garment (with the inside for fleece and French terry). The print step pulls the chosen print area out into a big circle with two lines, like textbook detail drawings, using the customer's own artwork when there is some. Methods that only work on some fabrics are shown on one they work on.
 - Admin logins (`src/server/auth.ts`):
   - Passwords are stored as salted scrypt hashes.
@@ -109,5 +115,6 @@ To update it after changing the site, or prices in the admin panel, run `npm run
 | 7. Group orders: share link, QR code, members add their own name and size, organizer dashboard | Done (server tested; a full browser run-through is still to do) |
 | 8. Admin dashboard: catalog and price editor, orders, production sheet PDF | Done: orders, payments, proofs, statuses, team notes, workshop sheet (print or save as PDF), price editor with saved versions, team logins with roles. Still to add: promo codes, sales numbers, weekly capacity, clip-art library, print-ready files per area |
 | — Real garment photos: every garment in every color as a product photo, with each print method's finish; 3D stays one tap away | Done |
+| — Prints anywhere: several per side, dragged and resized freely, priced by size; real print-type photos; real 3D models of the garments | Done (the zip hoodie has no 3D model yet) |
 | — Customer help: "send it to us" for own designs, colors and custom sizes; fabric magnifying glass; print close-ups; "Print types explained"; HEX color codes; plain-words fabric weights; no extra fee for 2XL and 3XL | Done |
 | 9. Polish, end-to-end tests, deployment | |

@@ -1,14 +1,15 @@
 "use client";
 
 import { BookOpen, Check, ChevronRight, Minus, Palette, Plus, Search, X, type LucideIcon } from "lucide-react";
-import type { ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { isLightHex } from "@/components/garment/color";
 import { GarmentImage } from "@/components/three/GarmentImage";
 import { sleeveLabels, startingPrice, tierHints, tierLabels, tr } from "@/lib/catalog";
 import type { Catalog, Product } from "@/lib/catalog/types";
-import { areaSide } from "@/lib/design/areas";
-import { allowedTiers, defaultDesign, methodBlock, switchProduct, togglePrint, updatePrint } from "@/lib/design/logic";
-import type { DesignSelection } from "@/lib/pricing/types";
+import { addPrint, defaultDesign, methodBlock, removePrint, switchProduct, updatePrint } from "@/lib/design/logic";
+import { isPrintSide, MAX_PRINTS_PER_SIDE, maxTierOf, printBounds, sideNames, sidesFor, sideView, tierLimitCm, type PrintSide } from "@/lib/design/sides";
+import { useDesignStore } from "@/lib/design/store";
+import type { DesignSelection, PrintSelection } from "@/lib/pricing/types";
 import { useI18n } from "@/i18n/client";
 import { fmt, formatDelta, formatMoney } from "@/i18n/format";
 import { ArtworkPanel } from "./ArtworkPanel";
@@ -202,17 +203,47 @@ export function SendItButton({ icon: Icon, onClick, children }: { icon: LucideIc
 
 /* ---------- Prints ---------- */
 
+const cm = (mm: number) => Math.round(mm / 10);
+
 export function PrintsPanel({
   catalog,
   design,
   product,
   update,
-  onFocusArea,
+  onFocusPrint,
   onExplainPrints,
-}: PanelProps & { onFocusArea: (areaId: string) => void; onExplainPrints: () => void }) {
+}: PanelProps & { onFocusPrint: (printId: string) => void; onExplainPrints: () => void }) {
   const { locale, dict } = useI18n();
   const t = dict.designer;
-  const areas = product.printAreaIds.map((id) => catalog.printAreas.find((a) => a.id === id)).filter((a): a is NonNullable<typeof a> => Boolean(a));
+  const selection = useDesignStore((s) => s.selection);
+  const select = useDesignStore((s) => s.select);
+  const setView = useDesignStore((s) => s.setView);
+  const sides = sidesFor(product.mockup);
+  const picked = design.prints.find((p) => p.id === selection?.printId);
+  const firstSide = design.prints.find((p) => isPrintSide(p.areaId))?.areaId;
+  const [side, setSide] = useState<PrintSide>(() => (picked && isPrintSide(picked.areaId) ? picked.areaId : firstSide && isPrintSide(firstSide) ? firstSide : "front"));
+  // Follow the chosen print to its side (it can be picked from the garment view too).
+  useEffect(() => {
+    if (picked && isPrintSide(picked.areaId)) setSide(picked.areaId);
+  }, [picked?.id, picked?.areaId]);
+  const shown: PrintSide = sides.includes(side) ? side : "front";
+  const onSide = design.prints.filter((p) => p.areaId === shown);
+  const current = picked && picked.areaId === shown ? picked : onSide[0];
+  const sideLabel = tr(sideNames[shown], locale);
+  const sideLower = locale === "en" ? sideLabel.toLowerCase() : sideLabel;
+
+  const chooseSide = (next: PrintSide) => {
+    setSide(next);
+    setView(sideView(next));
+    const first = design.prints.find((p) => p.areaId === next);
+    select(first ? { printId: first.id, elementId: null } : null);
+  };
+  const add = () => {
+    const r = addPrint(catalog, design, shown);
+    if (!r.printId) return;
+    update(r.design);
+    onFocusPrint(r.printId);
+  };
 
   return (
     <div className="space-y-4">
@@ -232,100 +263,147 @@ export function PrintsPanel({
         <ChevronRight className="h-5 w-5 shrink-0 text-gold transition-transform group-hover:translate-x-0.5 rtl:rotate-180 rtl:group-hover:-translate-x-0.5" aria-hidden />
       </button>
       <p className="text-sm text-cream-muted">{t.printsHint}</p>
-      <ul className="space-y-3">
-        {areas.map((area) => {
-          const print = design.prints.find((p) => p.areaId === area.id);
-          const side = areaSide(area.id);
+
+      <div role="tablist" aria-label={t.printSides} className="flex flex-wrap gap-2">
+        {sides.map((sd) => {
+          const count = design.prints.filter((p) => p.areaId === sd).length;
           return (
-            <li key={area.id} id={`area-${area.id}`} className={`rounded-xl border p-4 transition-colors ${print ? "border-gold/60 bg-gold/5" : "border-line"}`}>
-              <div className="flex items-center justify-between gap-3">
-                <button type="button" className="text-start" onClick={() => onFocusArea(area.id)}>
-                  <span className="block font-semibold text-cream">{tr(area.name, locale)}</span>
-                  <span className="text-xs text-cream-muted" dir="ltr">
-                    {area.widthCm} × {area.heightCm} cm · {side === "back" ? t.back : side === "front" ? t.front : t.sleeve}
-                  </span>
-                </button>
-                {print ? (
-                  <button type="button" onClick={() => update(togglePrint(catalog, design, area.id))} className="inline-flex items-center gap-1 rounded-full border border-line px-3 py-1.5 text-xs text-cream-muted hover:border-gold hover:text-gold">
-                    <X className="h-3.5 w-3.5" aria-hidden /> {t.remove}
+            <button
+              key={sd}
+              type="button"
+              role="tab"
+              aria-selected={shown === sd}
+              onClick={() => chooseSide(sd)}
+              className="inline-flex items-center gap-1.5 rounded-full border border-line px-3.5 py-2 text-sm font-semibold text-cream-muted transition-colors hover:border-gold/60 hover:text-cream aria-selected:border-gold aria-selected:bg-gold aria-selected:text-ink"
+            >
+              {tr(sideNames[sd], locale)}
+              {count ? <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-ink/80 px-1 text-xs text-gold">{count}</span> : null}
+            </button>
+          );
+        })}
+      </div>
+
+      {onSide.length ? (
+        <ul className="space-y-2">
+          {onSide.map((p, i) => {
+            const method = catalog.printMethods.find((m) => m.id === p.methodId);
+            const b = printBounds(p.elements);
+            const colors = method?.pricedPerColor ? Math.max(1, p.colorCount ?? 1) : 1;
+            const price = method?.prices[p.tier];
+            const isCurrent = current?.id === p.id;
+            return (
+              <li key={p.id} id={`print-${p.id}`} className={`rounded-xl border p-3 transition-colors ${isCurrent ? "border-gold/60 bg-gold/5" : "border-line"}`}>
+                <div className="flex items-center justify-between gap-3">
+                  <button type="button" className="min-w-0 flex-1 text-start" onClick={() => onFocusPrint(p.id)} aria-pressed={isCurrent}>
+                    <span className="block font-semibold text-cream">
+                      {fmt(t.printN, { n: i + 1 })} · {method ? tr(method.name, locale) : p.methodId}
+                    </span>
+                    <span className="text-xs text-cream-muted">
+                      {b ? <span dir="ltr">{cm(b.w)} × {cm(b.h)} cm · </span> : null}
+                      {tr(tierLabels[p.tier], locale)}
+                      {price !== undefined ? ` · ${formatMoney(price * colors, locale)}` : ""}
+                    </span>
                   </button>
-                ) : (
                   <button
                     type="button"
                     onClick={() => {
-                      update(togglePrint(catalog, design, area.id));
-                      onFocusArea(area.id);
+                      update(removePrint(design, p.id));
+                      if (isCurrent) select(null);
                     }}
-                    className="inline-flex items-center gap-1 rounded-full bg-gold px-3 py-1.5 text-xs font-semibold text-ink hover:bg-gold-light"
+                    className="inline-flex shrink-0 items-center gap-1 rounded-full border border-line px-3 py-1.5 text-xs text-cream-muted hover:border-gold hover:text-gold"
                   >
-                    <Plus className="h-3.5 w-3.5" aria-hidden /> {t.add}
+                    <X className="h-3.5 w-3.5" aria-hidden /> {t.remove}
                   </button>
-                )}
-              </div>
-
-              {print ? (
-                <div className="mt-4 space-y-4">
-                  <div>
-                    <p className="mb-2 text-xs font-semibold text-cream-muted">{t.method}</p>
-                    <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-                      {catalog.printMethods.map((m) => {
-                        const tiers = allowedTiers(catalog, design.sleeve, area.id, m.id);
-                        if (tiers.length === 0) return null;
-                        const block = methodBlock(catalog, design, m.id);
-                        const price = m.prices[tiers.includes(print.tier) ? print.tier : tiers[tiers.length - 1]!];
-                        return (
-                          <Choice
-                            key={m.id}
-                            selected={print.methodId === m.id}
-                            muted={Boolean(block)}
-                            onSelect={() => update(updatePrint(catalog, design, area.id, { methodId: m.id }))}
-                            className="px-2.5 py-2"
-                          >
-                            <span className="block text-sm font-semibold text-cream">{tr(m.name, locale)}</span>
-                            <span className="text-xs">
-                              {block ? (block === "fabric" ? t.unavailableFabric : t.unavailableColor) : price !== undefined ? formatMoney(price, locale) : ""}
-                              {!block && m.pricedPerColor ? ` / ${dict.pricing.perColor}` : ""}
-                            </span>
-                          </Choice>
-                        );
-                      })}
-                    </div>
-                  </div>
-
-                  <div>
-                    <p className="mb-2 text-xs font-semibold text-cream-muted">{t.printSize}</p>
-                    <div className="flex flex-wrap gap-2">
-                      {allowedTiers(catalog, design.sleeve, area.id, print.methodId).map((tier) => (
-                        <Choice key={tier} selected={print.tier === tier} onSelect={() => update(updatePrint(catalog, design, area.id, { tier }))} className="px-3 py-2">
-                          <span className="block text-sm font-semibold text-cream">{tr(tierLabels[tier], locale)}</span>
-                          <span className="text-xs">{tr(tierHints[tier], locale)}</span>
-                        </Choice>
-                      ))}
-                    </div>
-                  </div>
-
-                  {catalog.printMethods.find((m) => m.id === print.methodId)?.pricedPerColor ? (
-                    <div className="flex items-center justify-between gap-3">
-                      <p className="text-xs font-semibold text-cream-muted">{t.inkColors}</p>
-                      <div className="flex items-center gap-2">
-                        <button type="button" aria-label={t.decreaseColors} onClick={() => update(updatePrint(catalog, design, area.id, { colorCount: (print.colorCount ?? 1) - 1 }))} className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-line hover:border-gold">
-                          <Minus className="h-4 w-4" aria-hidden />
-                        </button>
-                        <span className="w-6 text-center font-semibold" aria-live="polite">{print.colorCount ?? 1}</span>
-                        <button type="button" aria-label={t.increaseColors} onClick={() => update(updatePrint(catalog, design, area.id, { colorCount: (print.colorCount ?? 1) + 1 }))} className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-line hover:border-gold">
-                          <Plus className="h-4 w-4" aria-hidden />
-                        </button>
-                      </div>
-                    </div>
-                  ) : null}
-
-                  <ArtworkPanel catalog={catalog} design={design} print={print} update={update} />
                 </div>
-              ) : null}
-            </li>
-          );
-        })}
-      </ul>
+              </li>
+            );
+          })}
+        </ul>
+      ) : (
+        <p className="rounded-xl border border-dashed border-line p-4 text-sm text-cream-muted">{fmt(t.noPrintsOnSide, { side: sideLower })}</p>
+      )}
+
+      {onSide.length < MAX_PRINTS_PER_SIDE ? (
+        <button type="button" onClick={add} className="btn btn-primary w-full py-3">
+          <Plus className="h-4 w-4" aria-hidden /> {fmt(onSide.length ? t.addAnotherPrintOn : t.addPrintOn, { side: sideLower })}
+        </button>
+      ) : (
+        <p className="text-xs text-cream-muted">{fmt(t.sideFull, { max: MAX_PRINTS_PER_SIDE })}</p>
+      )}
+
+      {current ? <PrintSettings key={current.id} catalog={catalog} design={design} print={current} update={update} /> : null}
+    </div>
+  );
+}
+
+/** Print type, ink colors, size and artwork for one print. */
+function PrintSettings({ catalog, design, print, update }: { catalog: Catalog; design: DesignSelection; print: PrintSelection; update: PanelProps["update"] }) {
+  const { locale, dict } = useI18n();
+  const t = dict.designer;
+  const method = catalog.printMethods.find((m) => m.id === print.methodId);
+  const b = printBounds(print.elements);
+  const max = method ? maxTierOf(method) : "L";
+  const limit = tierLimitCm(max);
+
+  return (
+    <div className="space-y-4 rounded-xl border border-gold/40 p-4">
+      <div>
+        <p className="mb-2 text-xs font-semibold text-cream-muted">{t.method}</p>
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+          {catalog.printMethods.map((m) => {
+            const block = methodBlock(catalog, design, m.id);
+            const price = m.prices[print.tier];
+            const tooBig = price === undefined;
+            return (
+              <Choice
+                key={m.id}
+                selected={print.methodId === m.id}
+                muted={Boolean(block)}
+                onSelect={() => update(updatePrint(catalog, design, print.id, { methodId: m.id }))}
+                className="px-2.5 py-2"
+              >
+                <span className="block text-sm font-semibold text-cream">{tr(m.name, locale)}</span>
+                <span className="text-xs">
+                  {block
+                    ? block === "fabric"
+                      ? t.unavailableFabric
+                      : t.unavailableColor
+                    : tooBig
+                      ? fmt(t.methodUpTo, { size: tr(tierLabels[maxTierOf(m)], locale) })
+                      : `${formatMoney(price, locale)}${m.pricedPerColor ? ` / ${dict.pricing.perColor}` : ""}`}
+                </span>
+              </Choice>
+            );
+          })}
+        </div>
+      </div>
+
+      {method?.pricedPerColor ? (
+        <div className="flex items-center justify-between gap-3">
+          <p className="text-xs font-semibold text-cream-muted">{t.inkColors}</p>
+          <div className="flex items-center gap-2">
+            <button type="button" aria-label={t.decreaseColors} onClick={() => update(updatePrint(catalog, design, print.id, { colorCount: (print.colorCount ?? 1) - 1 }))} className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-line hover:border-gold">
+              <Minus className="h-4 w-4" aria-hidden />
+            </button>
+            <span className="w-6 text-center font-semibold" aria-live="polite">{print.colorCount ?? 1}</span>
+            <button type="button" aria-label={t.increaseColors} onClick={() => update(updatePrint(catalog, design, print.id, { colorCount: (print.colorCount ?? 1) + 1 }))} className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-line hover:border-gold">
+              <Plus className="h-4 w-4" aria-hidden />
+            </button>
+          </div>
+        </div>
+      ) : null}
+
+      <div className="rounded-lg bg-ink/60 px-3 py-2 text-xs leading-relaxed text-cream-muted">
+        <p>
+          <span className="font-semibold text-cream">{t.printSize}: </span>
+          {b ? <span dir="ltr">{cm(b.w)} × {cm(b.h)} cm · </span> : null}
+          {tr(tierLabels[print.tier], locale)} ({tr(tierHints[print.tier], locale)})
+        </p>
+        {method && limit ? <p>{fmt(t.methodMax, { method: tr(method.name, locale), size: `${limit[0]} × ${limit[1]} cm` })}</p> : null}
+        <p>{t.priceFollowsSize}</p>
+      </div>
+
+      <ArtworkPanel catalog={catalog} design={design} print={print} update={update} />
     </div>
   );
 }

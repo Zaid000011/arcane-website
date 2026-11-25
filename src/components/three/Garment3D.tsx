@@ -1,26 +1,31 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { Catalog, SizeTier } from "@/lib/catalog/types";
+import type { Catalog } from "@/lib/catalog/types";
 import type { DesignSelection } from "@/lib/pricing/types";
-import { areaAnchor, type PrintSamples } from "@/lib/three/print-layers";
+import { printAnchor, type PrintSamples } from "@/lib/three/print-layers";
 import type { Vec3 } from "@/lib/three/shape";
 import { GarmentStage, type StageView } from "@/lib/three/stage";
 import { CloseUpOverlay, type CloseUpTarget, type CloseUpView } from "./CloseUpOverlay";
 
-/** Lets a close-up follow a print area on the turning 3D garment. */
+/** Lets a close-up follow a print on the turning 3D garment. */
 function stageTarget(stage: GarmentStage, catalog: Catalog): CloseUpTarget {
-  let build = stage.garment;
+  let shown: object | null = stage.model ?? stage.garment;
   const anchors = new Map<string, { p: Vec3; n: Vec3 } | null>();
   return {
     element: () => stage.renderer.domElement,
-    locate(areaId: string, tier: SizeTier) {
-      if (stage.garment !== build) {
-        build = stage.garment;
+    locate(print, design) {
+      const now = stage.model ?? stage.garment;
+      if (now !== shown) {
+        shown = now;
         anchors.clear();
       }
-      const key = `${areaId}|${tier}`;
-      if (!anchors.has(key)) anchors.set(key, build ? areaAnchor(build, catalog, areaId, tier) : null);
+      // Remembered per placement, so moving the artwork moves the callout.
+      const key = `${design.productId}|${design.sleeve}|${print.id}|${JSON.stringify(print.elements ?? [])}`;
+      if (!anchors.has(key)) {
+        if (anchors.size > 40) anchors.clear();
+        anchors.set(key, shown ? printAnchor(stage, catalog, design, print) : null);
+      }
       const a = anchors.get(key);
       return a ? stage.project(a.p, a.n) : null;
     },
@@ -53,6 +58,8 @@ export default function Garment3D({
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const stageRef = useRef<GarmentStage | null>(null);
   const [stage, setStage] = useState<GarmentStage | null>(null);
+  // Bumped when the garment shown changes (the real 3D model finished loading), so prints are laid on again.
+  const [garmentVersion, setGarmentVersion] = useState(0);
   const product = catalog.products.find((p) => p.id === design.productId) ?? catalog.products[0]!;
   const color = catalog.colors.find((c) => c.id === design.bodyColorId)?.hex ?? "#151515";
   const fabric = product.fabrics.find((f) => f.id === design.fabricId) ?? product.fabrics[0];
@@ -70,7 +77,9 @@ export default function Garment3D({
       if (rect) stage.resize(rect.width, rect.height);
     });
     ro.observe(canvas);
+    const stopGarment = stage.onGarmentChange(() => setGarmentVersion((v) => v + 1));
     return () => {
+      stopGarment();
       ro.disconnect();
       stage.dispose();
       stageRef.current = null;
@@ -90,7 +99,7 @@ export default function Garment3D({
       void import("@/lib/three/print-layers").then(({ updatePrintLayers }) => updatePrintLayers(stage, catalog, design, { placeholders, samples }));
     }, 90);
     return () => clearTimeout(timer);
-  }, [catalog, design, placeholders, samples, color]);
+  }, [catalog, design, placeholders, samples, color, garmentVersion]);
 
   useEffect(() => {
     stageRef.current?.setView(view);

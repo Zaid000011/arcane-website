@@ -5,16 +5,16 @@ import Link from "next/link";
 import { ElementShape } from "@/components/designer/ElementShape";
 import { GarmentImage } from "@/components/three/GarmentImage";
 import { sleeveLabels, tierLabels, tr } from "@/lib/catalog";
-import type { Catalog, PrintArea } from "@/lib/catalog/types";
+import type { Catalog } from "@/lib/catalog/types";
 import type { OrderItem, OrderView } from "@/lib/checkout/types";
-import { elementBBox, measuredFor, printBoxMm, rotatedExtents, tierBoxCm } from "@/lib/design/geometry";
+import { withFreePrints } from "@/lib/design/logic";
 import { useMeasureStore } from "@/lib/design/measure-store";
-import { placementOf, placementText } from "@/lib/design/placement";
+import { isPrintSide, panelBox, placeRect, printBounds, rectPlacementText, sideNames } from "@/lib/design/sides";
 import type { DesignElement } from "@/lib/design/types";
 import { fontById } from "@/lib/design/fonts";
 import { addWorkingDays } from "@/lib/order/dates";
 import { effectiveSizes, needsRoster } from "@/lib/order/roster";
-import type { PersonalStyle, PrintSelection } from "@/lib/pricing/types";
+import type { DesignSelection, PersonalStyle, PrintSelection } from "@/lib/pricing/types";
 import type { OrderNote } from "@/server/orders";
 import { artworkLine } from "./TeamOrderItems";
 import { day, when } from "./ui";
@@ -90,7 +90,7 @@ export function WorkshopSheet({ order, notes, catalog }: { order: OrderView; not
 }
 
 function ItemSection({ item, index, count, catalog }: { item: OrderItem; index: number; count: number; catalog: Catalog }) {
-  const d = item.design;
+  const d = withFreePrints(catalog, item.design);
   const product = catalog.products.find((p) => p.id === d.productId);
   const fit = catalog.fits.find((f) => f.id === d.fitId);
   const fabric = product?.fabrics.find((f) => f.id === d.fabricId);
@@ -156,9 +156,9 @@ function ItemSection({ item, index, count, catalog }: { item: OrderItem; index: 
 
       {d.prints.length ? (
         <div className="mt-4 space-y-4">
-          {d.prints.map((print) => {
-            const area = catalog.printAreas.find((a) => a.id === print.areaId);
-            return area ? <PrintSection key={print.areaId} area={area} print={print} catalog={catalog} sleeve={d.sleeve} bodyHex={color?.hex ?? "#ffffff"} /> : null;
+          {d.prints.map((print, i) => {
+            const n = d.prints.slice(0, i + 1).filter((p) => p.areaId === print.areaId).length;
+            return <PrintSection key={print.id} print={print} n={n} catalog={catalog} design={d} bodyHex={color?.hex ?? "#ffffff"} />;
           })}
         </div>
       ) : (
@@ -260,35 +260,36 @@ function ItemSection({ item, index, count, catalog }: { item: OrderItem; index: 
   );
 }
 
-/** One print area: where it goes, the box and artwork sizes, and a to-scale flat drawing. */
-function PrintSection({ area, print, catalog, sleeve, bodyHex }: { area: PrintArea; print: PrintSelection; catalog: Catalog; sleeve: "short" | "long"; bodyHex: string }) {
+/** One print: where it goes on its side, its size, and a to-scale flat drawing of the side with it in place. */
+function PrintSection({ print, n, catalog, design, bodyHex }: { print: PrintSelection; n: number; catalog: Catalog; design: DesignSelection; bodyHex: string }) {
   const method = catalog.printMethods.find((m) => m.id === print.methodId);
-  const placement = placementOf(area.id, sleeve);
-  const [boxW, boxH] = tierBoxCm(area, print.tier);
-  const elements = print.elements ?? [];
+  const product = catalog.products.find((p) => p.id === design.productId);
   const measurements = useMeasureStore((s) => s.measurements);
-  const box = printBoxMm(area, print.tier);
-  const extent = artworkExtent(elements, measurements, box.w);
+  const elements = print.elements ?? [];
+  if (!product || !isPrintSide(print.areaId)) return null;
+  const side = print.areaId;
+  const panel = panelBox(product.mockup, design.sleeve, side);
+  const bounds = printBounds(elements, measurements);
+  const where = bounds ? placeRect(product.mockup, design.sleeve, side, bounds) : null;
+  const name = `${tr(sideNames[side], "en")}${n > 1 ? ` ${n}` : ""}`;
 
   return (
     <div className="break-inside-avoid rounded border border-neutral-300 p-3">
       <h3 className="font-bold">
-        {tr(area.name, "en")} · {method ? tr(method.name, "en") : print.methodId} · {tr(tierLabels[print.tier], "en")}
+        {name} · {method ? tr(method.name, "en") : print.methodId} · {tr(tierLabels[print.tier], "en")}
         {print.colorCount ? ` · ${print.colorCount} colors` : ""}
       </h3>
       <div className="mt-2 grid gap-3 sm:grid-cols-[1fr_12rem]">
         <ul className="space-y-1 text-sm">
-          {placement ? <li>{placementText(placement)}</li> : null}
-          <li>
-            Print box: {boxW} × {boxH} cm
-          </li>
-          {extent ? (
-            <li>
-              Artwork: <span className="font-semibold">{cm(extent.w)} × {cm(extent.h)} cm</span>, top edge {cm(extent.top)} cm below the top of the box,{" "}
-              {Math.abs(extent.offset) < 2 ? "centered" : `${cm(Math.abs(extent.offset))} cm ${extent.offset > 0 ? "right" : "left"} of center (as you look at it)`}
-            </li>
+          {where && bounds ? (
+            <>
+              <li>{rectPlacementText(where)}</li>
+              <li>
+                Print size: <span className="font-semibold">{cm(bounds.w)} × {cm(bounds.h)} cm</span>
+              </li>
+            </>
           ) : (
-            <li>No artwork in this area.</li>
+            <li>No artwork in this print.</li>
           )}
           {elements.map((el) => (
             <li key={el.id} className="text-neutral-600" dir="auto">
@@ -296,8 +297,9 @@ function PrintSection({ area, print, catalog, sleeve, bodyHex }: { area: PrintAr
             </li>
           ))}
         </ul>
-        <svg viewBox={`${-box.w * 0.08} ${-box.h * 0.08} ${box.w * 1.16} ${box.h * 1.16}`} className="w-full rounded" style={{ background: bodyHex }} role="img" aria-label={`Flat drawing of the ${tr(area.name, "en")} print`}>
-          <rect x={0} y={0} width={box.w} height={box.h} fill="none" stroke="#888" strokeWidth={1} strokeDasharray="5 4" vectorEffect="non-scaling-stroke" />
+        <svg viewBox={`${-panel.w * 0.06} ${-panel.h * 0.04} ${panel.w * 1.12} ${panel.h * 1.08}`} className="w-full rounded" style={{ background: bodyHex }} role="img" aria-label={`Flat drawing of the ${name} print`}>
+          <rect x={0} y={0} width={panel.w} height={panel.h} fill="none" stroke="#888" strokeWidth={1} strokeDasharray="5 4" vectorEffect="non-scaling-stroke" />
+          {bounds ? <rect x={bounds.x} y={bounds.y} width={bounds.w} height={bounds.h} fill="none" stroke="#c9a227" strokeWidth={1.2} vectorEffect="non-scaling-stroke" /> : null}
           {elements.map((el) => (
             <g key={el.id} transform={`translate(${el.x} ${el.y}) rotate(${el.rotation})`}>
               <ElementShape el={el} missingLabel="Image missing" />
@@ -307,21 +309,4 @@ function PrintSection({ area, print, catalog, sleeve, bodyHex }: { area: PrintAr
       </div>
     </div>
   );
-}
-
-/** Size and position of all the artwork together inside the print box (mm); offset is from the box's center line. */
-function artworkExtent(elements: DesignElement[], measurements: ReturnType<typeof useMeasureStore.getState>["measurements"], boxW: number) {
-  if (!elements.length) return null;
-  let minX = Infinity;
-  let maxX = -Infinity;
-  let minY = Infinity;
-  let maxY = -Infinity;
-  for (const el of elements) {
-    const r = rotatedExtents(elementBBox(el, measuredFor(el, measurements[el.id])), el.rotation);
-    minX = Math.min(minX, el.x + r.minX);
-    maxX = Math.max(maxX, el.x + r.maxX);
-    minY = Math.min(minY, el.y + r.minY);
-    maxY = Math.max(maxY, el.y + r.maxY);
-  }
-  return { w: maxX - minX, h: maxY - minY, top: minY, offset: (minX + maxX) / 2 - boxW / 2 };
 }

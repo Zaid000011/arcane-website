@@ -23,6 +23,7 @@ import { getAsset, putAsset, useAssetUrl } from "@/lib/design/assets";
 import { clipartById, clipartLibrary } from "@/lib/design/clipart";
 import {
   addElement,
+  boxFor,
   defaultClassText,
   duplicateElement,
   moveLayer,
@@ -33,7 +34,7 @@ import {
   updateElement,
 } from "@/lib/design/elements";
 import { defaultFontFor, designFonts, fontById, hasArabic } from "@/lib/design/fonts";
-import { dpiLevel, elementBBox, imageDpi, measuredFor, MIN_SIZE_MM, printBoxMm, rotatedExtents } from "@/lib/design/geometry";
+import { dpiLevel, elementBBox, imageDpi, measuredFor, MIN_SIZE_MM, rotatedExtents } from "@/lib/design/geometry";
 import { checkUpload, readImageInfo, removeBackground } from "@/lib/design/image-tools";
 import { useMeasureStore } from "@/lib/design/measure-store";
 import { useDesignStore } from "@/lib/design/store";
@@ -42,7 +43,7 @@ import type { DesignSelection, PrintSelection } from "@/lib/pricing/types";
 import { useI18n } from "@/i18n/client";
 import { fmt } from "@/i18n/format";
 import { Swatch } from "./controls";
-import { PrintBoxEditor } from "./PrintBoxEditor";
+import { SideEditor } from "./SideEditor";
 
 function elementLabel(el: DesignElement, t: { textLayer: string; imageLayer: string; clipartLayer: string }): string {
   if (el.type === "text") return el.text || t.textLayer;
@@ -57,10 +58,9 @@ export function ArtworkPanel({ catalog, design, print, update }: { catalog: Cata
   const t = dict.designer;
   const selection = useDesignStore((s) => s.selection);
   const select = useDesignStore((s) => s.select);
-  const area = catalog.printAreas.find((a) => a.id === print.areaId)!;
-  const box = printBoxMm(area, print.tier);
+  const box = boxFor(catalog, design, print) ?? { w: 100, h: 100 };
   const elements = print.elements ?? [];
-  const selected = selection?.areaId === print.areaId && selection.elementId ? elements.find((e) => e.id === selection.elementId) : undefined;
+  const selected = selection?.printId === print.id && selection.elementId ? elements.find((e) => e.id === selection.elementId) : undefined;
   const [showClipart, setShowClipart] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -69,8 +69,8 @@ export function ArtworkPanel({ catalog, design, print, update }: { catalog: Cata
   const ink = isLightHex(bodyHex) ? "#151515" : "#F5EBD8";
 
   const add = (el: DesignElement) => {
-    update(addElement(catalog, design, print.areaId, el));
-    select({ areaId: print.areaId, elementId: el.id });
+    update(addElement(catalog, design, print.id, el));
+    select({ printId: print.id, elementId: el.id });
   };
 
   const onFile = async (file: File | undefined) => {
@@ -98,7 +98,7 @@ export function ArtworkPanel({ catalog, design, print, update }: { catalog: Cata
   return (
     <div className="space-y-4 border-t border-line pt-4">
       <p className="text-xs font-semibold text-cream-muted">{t.artwork}</p>
-      <PrintBoxEditor catalog={catalog} print={print} bodyHex={bodyHex} />
+      <SideEditor catalog={catalog} design={design} print={print} bodyHex={bodyHex} />
       <div className="grid grid-cols-3 gap-2">
         <ToolButton onClick={() => fileRef.current?.click()} icon={<Upload className="h-4 w-4" aria-hidden />} label={busy ? t.adding : t.uploadImage} />
         <ToolButton
@@ -160,7 +160,7 @@ export function ArtworkPanel({ catalog, design, print, update }: { catalog: Cata
                 <button
                   type="button"
                   aria-pressed={selected?.id === el.id}
-                  onClick={() => select({ areaId: print.areaId, elementId: el.id })}
+                  onClick={() => select({ printId: print.id, elementId: el.id })}
                   className="flex w-full items-center gap-2 rounded-lg border border-line px-3 py-2 text-start text-sm text-cream-muted transition-colors hover:border-gold/50 aria-pressed:border-gold aria-pressed:bg-gold/10 aria-pressed:text-cream"
                 >
                   {el.type === "text" ? <Type className="h-4 w-4 shrink-0" aria-hidden /> : el.type === "image" ? <ImagePlus className="h-4 w-4 shrink-0" aria-hidden /> : <Shapes className="h-4 w-4 shrink-0" aria-hidden />}
@@ -202,11 +202,10 @@ function ElementEditor({ catalog, design, print, el, update }: { catalog: Catalo
   const t = dict.designer;
   const select = useDesignStore((s) => s.select);
   const measurement = useMeasureStore((s) => s.measurements[el.id]);
-  const area = catalog.printAreas.find((a) => a.id === print.areaId)!;
-  const box = printBoxMm(area, print.tier);
+  const box = boxFor(catalog, design, print) ?? { w: 100, h: 100 };
   const colors = catalog.colors.filter((c) => c.inStock);
   const set = (patch: Partial<DesignElement>, coalesce?: string) =>
-    update(updateElement(catalog, design, print.areaId, el.id, patch, measurement), coalesce ? `${coalesce}:${el.id}` : undefined);
+    update(updateElement(catalog, design, print.id, el.id, patch, measurement), coalesce ? `${coalesce}:${el.id}` : undefined);
 
   const center = (axis: "x" | "y") => {
     const ext = rotatedExtents(elementBBox(el, measuredFor(el, measurement)), el.rotation);
@@ -215,22 +214,22 @@ function ElementEditor({ catalog, design, print, el, update }: { catalog: Catalo
   };
 
   const sizeValue = el.type === "text" ? el.size : el.w;
-  const maxSize = el.type === "text" ? Math.max(MIN_SIZE_MM + 1, box.h) : Math.max(MIN_SIZE_MM + 1, Math.max(box.w, box.h));
+  const maxSize = el.type === "text" ? Math.max(MIN_SIZE_MM + 1, Math.min(box.h, 300)) : Math.max(MIN_SIZE_MM + 1, Math.max(box.w, box.h));
 
   return (
     <div className="space-y-5 rounded-xl border border-gold/40 bg-ink/50 p-4">
       <div className="flex flex-wrap items-center gap-1.5">
         <SmallButton label={t.duplicate} onClick={() => {
-          const r = duplicateElement(catalog, design, print.areaId, el.id);
+          const r = duplicateElement(catalog, design, print.id, el.id);
           update(r.design);
-          if (r.newId) select({ areaId: print.areaId, elementId: r.newId });
+          if (r.newId) select({ printId: print.id, elementId: r.newId });
         }}>
           <Copy className="h-4 w-4" />
         </SmallButton>
-        <SmallButton label={t.bringForward} onClick={() => update(moveLayer(design, print.areaId, el.id, 1))}>
+        <SmallButton label={t.bringForward} onClick={() => update(moveLayer(design, print.id, el.id, 1))}>
           <ArrowUp className="h-4 w-4" />
         </SmallButton>
-        <SmallButton label={t.sendBackward} onClick={() => update(moveLayer(design, print.areaId, el.id, -1))}>
+        <SmallButton label={t.sendBackward} onClick={() => update(moveLayer(design, print.id, el.id, -1))}>
           <ArrowDown className="h-4 w-4" />
         </SmallButton>
         <SmallButton label={t.centerH} onClick={() => center("x")}>
@@ -246,8 +245,8 @@ function ElementEditor({ catalog, design, print, el, update }: { catalog: Catalo
           label={t.delete}
           danger
           onClick={() => {
-            update(removeElement(design, print.areaId, el.id));
-            select({ areaId: print.areaId, elementId: null });
+            update(removeElement(design, print.id, el.id));
+            select({ printId: print.id, elementId: null });
           }}
         >
           <Trash2 className="h-4 w-4" />

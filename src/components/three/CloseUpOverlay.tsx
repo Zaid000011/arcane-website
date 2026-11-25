@@ -7,21 +7,21 @@ import { tr } from "@/lib/catalog";
 import type { Catalog, FabricOption } from "@/lib/catalog/types";
 import { artFrom, closeUpFabric, closeUpSize, cropArt, sampleArt, useCloseUp } from "@/lib/closeup/client";
 import { hasDistinctInside } from "@/lib/closeup/surface";
-import type { SizeTier } from "@/lib/catalog/types";
-import { tierBoxCm } from "@/lib/design/geometry";
-import type { DesignSelection } from "@/lib/pricing/types";
+import { useMeasureStore } from "@/lib/design/measure-store";
+import { isPrintSide, panelBox, printRenderRect } from "@/lib/design/sides";
+import type { DesignSelection, PrintSelection } from "@/lib/pricing/types";
 import { useI18n } from "@/i18n/client";
 import { fmt } from "@/i18n/format";
 
 /** What the close-up shows: the fabric under a magnifying glass, or one print area pulled out into a circle. */
-export type CloseUpView = { type: "fabric" } | { type: "print"; areaId: string };
+export type CloseUpView = { type: "fabric" } | { type: "print"; printId: string };
 
 /** The garment picture a close-up points into: the 3D garment or the photo. */
 export interface CloseUpTarget {
   /** The element showing the garment (the close-up covers it). */
   element(): HTMLElement | null;
-  /** Where the middle of a print area shows (CSS pixels from the element's corner), and whether it faces the viewer. */
-  locate(areaId: string, tier: SizeTier): { x: number; y: number; facing: boolean } | null;
+  /** Where the middle of a print shows (CSS pixels from the element's corner), and whether it faces the viewer. */
+  locate(print: PrintSelection, design: DesignSelection): { x: number; y: number; facing: boolean } | null;
   /** Calls `fn` whenever the picture moves or is redrawn. Returns a function that stops it. */
   subscribe(fn: () => void): () => void;
   /** Asks for a redraw soon. */
@@ -39,8 +39,8 @@ export function CloseUpOverlay({ target, view, catalog, design }: { target: Clos
     <div className="pointer-events-none absolute inset-0 overflow-hidden [container-type:size]" aria-hidden>
       {view.type === "fabric" ? (
         <FabricLens fabric={fabric} color={color} />
-      ) : design.prints.some((p) => p.areaId === view.areaId) ? (
-        <PrintCallout key={view.areaId} target={target} catalog={catalog} design={design} areaId={view.areaId} fabric={fabric} color={color} />
+      ) : design.prints.some((p) => p.id === view.printId) ? (
+        <PrintCallout key={view.printId} target={target} catalog={catalog} design={design} printId={view.printId} fabric={fabric} color={color} />
       ) : null}
     </div>
   );
@@ -116,22 +116,25 @@ function PrintCallout({
   target,
   catalog,
   design,
-  areaId,
+  printId,
   fabric,
   color,
 }: {
   target: CloseUpTarget;
   catalog: Catalog;
   design: DesignSelection;
-  areaId: string;
+  printId: string;
   fabric: FabricOption;
   color: string;
 }) {
   const { locale, dict } = useI18n();
   const t = dict.designer;
-  const print = design.prints.find((p) => p.areaId === areaId)!;
-  const area = catalog.printAreas.find((a) => a.id === areaId);
+  const print = design.prints.find((p) => p.id === printId)!;
+  const product = catalog.products.find((p) => p.id === design.productId);
   const method = catalog.printMethods.find((m) => m.id === print.methodId);
+  // The latest print and design, for placing the callout as the garment redraws.
+  const latest = useRef({ print, design });
+  latest.current = { print, design };
   const elements = print.elements ?? [];
   const own = elements.length > 0;
   const box = useRef<HTMLDivElement>(null);
@@ -142,15 +145,16 @@ function PrintCallout({
   // Draw it on a fabric the method really works on (sublimation needs light polyester, DTG needs cotton).
   const base = method ? closeUpFabric(method, fabric, color) : { fabricId: fabric.id, kind: fabric.kind, color };
   const size = closeUpSize(diameter);
-  const [wCm, hCm] = area ? tierBoxCm(area, print.tier) : [10, 10];
   const artKey = own ? hashString(JSON.stringify(elements)) : "sample";
-  const key = `${print.methodId}|${base.fabricId}|${base.kind}|${base.color}|${size}|${print.tier}|${artKey}`;
+  const key = `${print.methodId}|${base.fabricId}|${base.kind}|${base.color}|${size}|${artKey}`;
   const image = useCloseUp(key, async () => {
     let art: HTMLCanvasElement | null = null;
-    if (own) {
-      const { drawPrintCanvas } = await import("@/lib/three/print-canvas");
-      const full = await drawPrintCanvas(elements, wCm * 10, hCm * 10, PATCHES[print.methodId] ?? null);
-      art = cropArt(full, wCm * 10, hCm * 10, size);
+    if (own && product && isPrintSide(print.areaId)) {
+      const { drawPrintRect } = await import("@/lib/three/print-canvas");
+      const patch = PATCHES[print.methodId] ?? null;
+      const rect = printRenderRect(elements, panelBox(product.mockup, design.sleeve, print.areaId), useMeasureStore.getState().measurements, patch ? 6 : 2);
+      const full = await drawPrintRect(elements, rect, patch);
+      art = cropArt(full, rect.w, rect.h, size);
     }
     art ??= sampleArt(print.methodId, base.color, size);
     return { key: `print|${key}`, job: { type: "print", methodId: print.methodId, fabricId: base.fabricId, kind: base.kind, color: base.color, size, art: artFrom(art, size) } };
@@ -166,7 +170,7 @@ function PrintCallout({
       if (!w || !h || !box.current || !lines.current || !caption.current) return;
       const D = Math.round(Math.min(h * 0.46, w * 0.42, 230));
       const R = D / 2;
-      const pr = target.locate(areaId, print.tier);
+      const pr = target.locate(latest.current.print, latest.current.design);
       // The big circle goes on the side away from the print, and stays there while turning.
       side ??= pr && pr.x > w / 2 ? "left" : "right";
       const cx = side === "right" ? w - R - 14 : R + 14;
@@ -211,7 +215,7 @@ function PrintCallout({
     return stop;
     // `diameter` only resizes the picture; placing doesn't depend on it.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [target, areaId, print.tier]);
+  }, [target, printId]);
 
   return (
     <>

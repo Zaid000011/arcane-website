@@ -3,6 +3,7 @@ import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
 import type { MockupId, Sleeve } from "@/lib/catalog/types";
 import { applyFinish, buildGarment, disposeGroup, fabricFinish, setFabricColor, setThreadColor, type GarmentBuild } from "./garment";
+import { buildModel, hasModel, recolorModel, type ModelBuild } from "./model";
 import type { Vec3 } from "./shape";
 import { groundShadow } from "./textures";
 
@@ -22,6 +23,11 @@ export class GarmentStage {
   readonly prints = new THREE.Group();
   controls: OrbitControls | null = null;
   garment: GarmentBuild | null = null;
+  /** A real 3D garment made from the photos, shown instead of the drawn one when there is one. */
+  model: ModelBuild | null = null;
+  private wantModel = "";
+  private modelColor = "";
+  private garmentListeners = new Set<() => void>();
   private garmentKey = "";
   private finishKey = "";
   private ground: THREE.Mesh;
@@ -98,6 +104,43 @@ export class GarmentStage {
    * recolors it and swaps the knit texture).
    */
   setGarment(mockup: MockupId, sleeve: Sleeve, fitId: string, color: string, fabric: { id: string; kind: string } = { id: "cotton", kind: "cotton" }) {
+    // A real 3D model, when this garment has one: the drawn garment shows until it has loaded.
+    const modelKey = hasModel(mockup, sleeve) ? `${mockup}-${sleeve}` : "";
+    this.modelColor = color;
+    if (modelKey && this.model?.key === modelKey) {
+      recolorModel(this.model, color);
+      this.requestRender();
+      return;
+    }
+    if (this.model) {
+      this.scene.remove(this.model.group);
+      disposeGroup(this.model.group);
+      this.model = null;
+      this.notifyGarment();
+    }
+    this.wantModel = modelKey;
+    if (modelKey) {
+      void buildModel(mockup, sleeve, color)
+        .then((build) => {
+          if (!build) return;
+          if (this.disposed || this.wantModel !== modelKey) {
+            disposeGroup(build.group);
+            return;
+          }
+          if (this.garment) {
+            this.scene.remove(this.garment.group);
+            disposeGroup(this.garment.group);
+            this.garment = null;
+            this.garmentKey = "";
+          }
+          recolorModel(build, this.modelColor);
+          this.model = build;
+          this.scene.add(build.group);
+          this.fit();
+          this.notifyGarment();
+        })
+        .catch(() => undefined);
+    }
     const key = `${mockup}|${sleeve}|${fitId}`;
     const finishKey = `${fabric.id}|${fabric.kind}`;
     if (this.garment && key === this.garmentKey) {
@@ -118,12 +161,24 @@ export class GarmentStage {
     this.finishKey = finishKey;
     this.scene.add(this.garment.group);
     this.fit();
+    this.notifyGarment();
+  }
+
+  /** Calls `fn` when the garment shown changes (e.g. the real 3D model finished loading). Returns a function that stops it. */
+  onGarmentChange(fn: () => void): () => void {
+    this.garmentListeners.add(fn);
+    return () => this.garmentListeners.delete(fn);
+  }
+
+  private notifyGarment() {
+    for (const fn of this.garmentListeners) fn();
   }
 
   /** Frames the garment and puts the soft shadow under it. */
   private fit() {
-    if (!this.garment) return;
-    const box = new THREE.Box3().setFromObject(this.garment.group);
+    const shown = this.model?.group ?? this.garment?.group;
+    if (!shown) return;
+    const box = new THREE.Box3().setFromObject(shown);
     const size = box.getSize(new THREE.Vector3());
     const center = box.getCenter(new THREE.Vector3());
     this.target.copy(center);
@@ -236,6 +291,8 @@ export class GarmentStage {
     if (this.frame) cancelAnimationFrame(this.frame);
     this.controls?.dispose();
     if (this.garment) disposeGroup(this.garment.group);
+    if (this.model) disposeGroup(this.model.group);
+    this.garmentListeners.clear();
     disposeGroup(this.prints);
     this.renderer.dispose();
   }

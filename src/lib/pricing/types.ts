@@ -2,12 +2,16 @@ import type { LocalizedText, SizeTier, Sleeve } from "@/lib/catalog/types";
 import type { DesignElement } from "@/lib/design/types";
 
 export interface PrintSelection {
+  /** Tells prints apart: one side can hold several. */
+  id: string;
+  /** The side it's on: "front", "back", "leftSleeve", "rightSleeve" or "hood" (see src/lib/design/sides.ts). */
   areaId: string;
   methodId: string;
+  /** Size tier, worked out from the artwork's size (up to 10 × 10 cm Small, up to A4 Medium, up to A3 Large, bigger All-over). */
   tier: SizeTier;
   /** Only used by methods priced per color (screen print). */
   colorCount?: number;
-  /** Artwork inside the print box. Doesn't affect price (the size tier does). */
+  /** Artwork, in mm from the top-left corner of the side's printable panel. */
   elements?: DesignElement[];
 }
 
@@ -93,6 +97,7 @@ export type QuoteIssueCode =
   | "invalidMethod"
   | "tierTooLarge"
   | "tierNotOffered"
+  | "printTooBig"
   | "methodFabricMismatch"
   | "methodNeedsLightGarment"
   | "tooManyColors"

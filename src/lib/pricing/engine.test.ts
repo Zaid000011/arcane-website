@@ -2,9 +2,20 @@ import { describe, expect, it } from "vitest";
 import { seedCatalog } from "@/lib/catalog/seed";
 import type { Catalog } from "@/lib/catalog/types";
 import { hasBlockingIssues, quote } from "./engine";
-import type { DesignSelection, OrderSelection } from "./types";
+import type { DesignSelection, OrderSelection, PrintSelection } from "./types";
 
 const noPersonalization = { names: false, numbers: false, namesList: false, neckLabel: false };
+
+let printCount = 0;
+/** A print on a side whose artwork measures w × h cm (one image, so its size is exact). */
+const pr = (side: string, methodId: string, wCm: number, hCm: number, over: Partial<PrintSelection> = {}): PrintSelection => ({
+  id: `p${++printCount}`,
+  areaId: side,
+  methodId,
+  tier: "S",
+  elements: [{ id: `e${printCount}`, type: "image", assetId: "asset-0001", name: "art.png", w: wCm * 10, aspect: hCm / wCm, pxW: 4000, pxH: 4000, vector: true, x: 200, y: 250, rotation: 0 }],
+  ...over,
+});
 
 const hoodie = (over: Partial<DesignSelection> = {}): DesignSelection => ({
   productId: "hoodie",
@@ -78,7 +89,7 @@ describe("options and colors", () => {
       fitId: "oversized",
       gsm: 320,
       partColors: { hoodLining: "arcaneRed", drawstrings: "black" },
-      prints: [{ areaId: "frontCenter", methodId: "dtf", tier: "M" }],
+      prints: [pr("front", "dtf", 21, 30)],
       personalization: { ...noPersonalization, names: true },
     });
     const q = quote(seedCatalog, design, order({ M: 6, L: 4 }));
@@ -128,7 +139,7 @@ describe("sizes", () => {
   it("returns a unit price but no totals while quantity is zero", () => {
     const q = quote(
       seedCatalog,
-      tee({ prints: [{ areaId: "leftChest", methodId: "embroidery", tier: "S" }] }),
+      tee({ prints: [pr("front", "embroidery", 10, 10)] }),
       order({}, { deliverySpeedId: "express" }),
     );
     expect(q.unitPrice).toBe(710);
@@ -141,7 +152,7 @@ describe("sizes", () => {
 
 describe("prints", () => {
   it("prices screen printing per color and charges setup per color once", () => {
-    const design = tee({ prints: [{ areaId: "fullBack", methodId: "screen", tier: "L", colorCount: 2 }] });
+    const design = tee({ prints: [pr("back", "screen", 30, 40, { colorCount: 2 })] });
     const q = quote(seedCatalog, design, order({ M: 30 }));
     expect(q.unitPrice).toBe(650 + 40 * 2);
     expect(q.itemsTotal).toBe(730 * 30);
@@ -151,54 +162,67 @@ describe("prints", () => {
   });
 
   it("blocks screen printing under the minimum quantity", () => {
-    const design = tee({ prints: [{ areaId: "fullBack", methodId: "screen", tier: "L", colorCount: 1 }] });
+    const design = tee({ prints: [pr("back", "screen", 30, 40, { colorCount: 1 })] });
     const q = quote(seedCatalog, design, order({ M: 20 }));
     expect(q.issues).toContainEqual({ code: "minQuantity", severity: "error", params: { methodId: "screen", minQty: 24 } });
   });
 
   it("only warns about minimum quantity before sizes are entered", () => {
-    const design = tee({ prints: [{ areaId: "fullBack", methodId: "screen", tier: "L", colorCount: 1 }] });
+    const design = tee({ prints: [pr("back", "screen", 30, 40, { colorCount: 1 })] });
     const q = quote(seedCatalog, design, order({}));
     expect(q.issues).toEqual([{ code: "minQuantity", severity: "warning", params: { methodId: "screen", minQty: 24 } }]);
   });
 
   it("doesn't warn about minimums for methods without one", () => {
-    const q = quote(seedCatalog, tee({ prints: [{ areaId: "frontCenter", methodId: "dtf", tier: "M" }] }), order({}));
+    const q = quote(seedCatalog, tee({ prints: [pr("front", "dtf", 21, 30)] }), order({}));
     expect(q.issues).toEqual([]);
   });
 
   it("rejects more screen colors than allowed", () => {
-    const design = tee({ prints: [{ areaId: "fullBack", methodId: "screen", tier: "L", colorCount: 9 }] });
+    const design = tee({ prints: [pr("back", "screen", 30, 40, { colorCount: 9 })] });
     expect(codes(quote(seedCatalog, design, order({ M: 30 })))).toContain("tooManyColors");
   });
 
   it("charges embroidery digitizing once no matter the quantity", () => {
-    const design = tee({ prints: [{ areaId: "leftChest", methodId: "embroidery", tier: "S" }] });
+    const design = tee({ prints: [pr("front", "embroidery", 10, 10)] });
     expect(quote(seedCatalog, design, order({ M: 1 })).subtotal).toBe(710 + 300);
     expect(quote(seedCatalog, design, order({ M: 50 })).subtotal).toBe(710 * 50 + 300);
   });
 
-  it("rejects a print larger than the area allows", () => {
-    const q = quote(seedCatalog, tee({ prints: [{ areaId: "leftChest", methodId: "dtf", tier: "L" }] }), order({ M: 1 }));
-    expect(codes(q)).toContain("tierTooLarge");
+  it("prices each print by the size of its artwork", () => {
+    const price = (w: number, h: number) => quote(seedCatalog, tee({ prints: [pr("front", "dtf", w, h)] }), order({ M: 1 })).unitPrice - 650;
+    expect(price(9, 9)).toBe(40);
+    expect(price(20, 28)).toBe(80);
+    // Landscape A4 is still A4.
+    expect(price(29, 20)).toBe(80);
+    expect(price(30, 40)).toBe(130);
+  });
+
+  it("works the size out from the artwork, not from the size the browser sent", () => {
+    const q = quote(seedCatalog, tee({ prints: [pr("back", "dtf", 30, 40, { tier: "S" })] }), order({ M: 1 }));
+    expect(q.unitPrice).toBe(650 + 130);
+  });
+
+  it("rejects a print bigger than its print type allows", () => {
+    const q = quote(seedCatalog, tee({ prints: [pr("front", "wovenPatch", 20, 20)] }), order({ M: 1 }));
+    expect(codes(q)).toContain("printTooBig");
+    expect(q.issues.find((i) => i.code === "printTooBig")?.params).toMatchObject({ methodId: "wovenPatch", maxTier: "S", tier: "M" });
     expect(q.unitPrice).toBe(650);
   });
 
-  it("limits sleeve prints on short sleeves but allows them on long sleeves", () => {
-    const print = { areaId: "leftSleeve", methodId: "dtf", tier: "M" as const };
-    expect(codes(quote(seedCatalog, tee({ prints: [print] }), order({ M: 1 })))).toContain("tierTooLarge");
-    const long = quote(seedCatalog, tee({ sleeve: "long", prints: [print] }), order({ M: 1 }));
+  it("prices a sleeve print by its size", () => {
+    const long = quote(seedCatalog, tee({ sleeve: "long", prints: [pr("leftSleeve", "dtf", 8, 30)] }), order({ M: 1 }));
     expect(long.issues).toEqual([]);
     expect(long.unitPrice).toBe(710 + 80);
   });
 
   it("rejects DTG on polyester", () => {
-    const q = quote(seedCatalog, tee({ fabricId: "polyester", prints: [{ areaId: "frontCenter", methodId: "dtg", tier: "M" }] }), order({ M: 1 }));
+    const q = quote(seedCatalog, tee({ fabricId: "polyester", prints: [pr("front", "dtg", 21, 30)] }), order({ M: 1 }));
     expect(codes(q)).toContain("methodFabricMismatch");
   });
 
-  it("requires light polyester for sublimation", () => {
-    const sublimation = { areaId: "fullFront", methodId: "sublimation", tier: "AO" as const };
+  it("requires light polyester for sublimation, and prices bigger than A3 as all-over", () => {
+    const sublimation = pr("front", "sublimation", 38, 50);
     const dark = quote(seedCatalog, tee({ fabricId: "polyester", prints: [sublimation] }), order({ M: 1 }));
     expect(codes(dark)).toContain("methodNeedsLightGarment");
 
@@ -207,16 +231,22 @@ describe("prints", () => {
     expect(light.unitPrice).toBe(650 + 250);
   });
 
-  it("rejects two prints on the same area", () => {
-    const prints = [
-      { areaId: "frontCenter", methodId: "dtf", tier: "M" as const },
-      { areaId: "frontCenter", methodId: "puff", tier: "M" as const },
-    ];
+  it("takes several prints on one side, each priced on its own", () => {
+    const prints = [pr("front", "dtf", 21, 30), pr("front", "puff", 10, 10), pr("front", "embroidery", 9, 9)];
+    const q = quote(seedCatalog, tee({ prints }), order({ M: 10 }));
+    expect(q.issues).toEqual([]);
+    expect(q.unitPrice).toBe(650 + 80 + 70 + 60);
+    expect(q.lines.filter((l) => l.kind === "print").map((l) => l.label.en)).toEqual(["Front · DTF · Medium", "Front 2 · Puff print · Small", "Front 3 · Embroidery · Small"]);
+  });
+
+  it("limits how many prints one side can hold", () => {
+    const prints = Array.from({ length: 7 }, () => pr("back", "dtf", 5, 5));
     expect(codes(quote(seedCatalog, tee({ prints }), order({ M: 10 })))).toContain("duplicateArea");
   });
 
-  it("rejects areas the product doesn't have", () => {
-    expect(codes(quote(seedCatalog, tee({ prints: [{ areaId: "hood", methodId: "dtf", tier: "S" }] }), order({ M: 1 })))).toContain("invalidArea");
+  it("rejects sides the product doesn't have", () => {
+    expect(codes(quote(seedCatalog, tee({ prints: [pr("hood", "dtf", 8, 8)] }), order({ M: 1 })))).toContain("invalidArea");
+    expect(codes(quote(seedCatalog, tee({ prints: [pr("frontCenter", "dtf", 8, 8)] }), order({ M: 1 })))).toContain("invalidArea");
   });
 });
 
@@ -262,7 +292,7 @@ describe("delivery speed", () => {
   });
 
   it("adds extra production days for slower print methods", () => {
-    const q = quote(seedCatalog, tee({ prints: [{ areaId: "leftChest", methodId: "embroidery", tier: "S" }] }), order({ M: 5 }, { deliverySpeedId: "rush" }));
+    const q = quote(seedCatalog, tee({ prints: [pr("front", "embroidery", 10, 10)] }), order({ M: 5 }, { deliverySpeedId: "rush" }));
     expect(q.delivery.workingDays).toBe(4 + 2);
   });
 
@@ -314,10 +344,7 @@ describe("big mixed order", () => {
     const design = hoodie({
       fitId: "oversized",
       gsm: 320,
-      prints: [
-        { areaId: "fullBack", methodId: "dtf", tier: "L" },
-        { areaId: "leftChest", methodId: "dtf", tier: "S" },
-      ],
+      prints: [pr("back", "dtf", 30, 40), pr("front", "dtf", 10, 10)],
       personalization: { ...noPersonalization, names: true },
     });
     const q = quote(

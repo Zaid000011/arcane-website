@@ -9,6 +9,7 @@ import { GarmentImage } from "@/components/three/GarmentImage";
 import { siteConfig } from "@/config/site";
 import { whatsappTo } from "@/lib/api-client";
 import { useCartReady, useCartStore, type CartItem } from "@/lib/cart/store";
+import { normalizePhone } from "@/lib/group/rules";
 import { tr } from "@/lib/catalog";
 import type { Catalog } from "@/lib/catalog/types";
 import { priceItem } from "@/lib/checkout/plan";
@@ -31,6 +32,10 @@ export function CartView({ catalog }: { catalog: Catalog }) {
   const quotes = useMemo(() => items.map((item) => ({ item, ...priceItem(catalog, item.design, item.order) })), [catalog, items]);
   const [orders, setOrders] = useState<MyOrder[]>([]);
   useEffect(() => setOrders(myOrders()), []);
+  // The GitHub Pages copy orders on WhatsApp: it still needs a real Egyptian number first.
+  const [waPhone, setWaPhone] = useState("");
+  const [waTouched, setWaTouched] = useState(false);
+  const waPhoneOk = Boolean(normalizePhone(waPhone));
 
   if (!ready) return <div className="section min-h-[50vh] py-14" aria-busy="true" />;
 
@@ -98,14 +103,35 @@ export function CartView({ catalog }: { catalog: Catalog }) {
           ) : STATIC_SITE ? (
             // The GitHub Pages copy has no online checkout: the order goes to WhatsApp instead.
             <>
-              <a
-                href={whatsappTo(siteConfig.whatsappNumber, orderMessage(catalog, items, locale, dict))}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="btn btn-primary w-full py-3.5 text-base"
-              >
-                <MessageCircle className="h-4 w-4" aria-hidden /> {t.orderWhatsapp}
-              </a>
+              <label className="block">
+                <span className="mb-1.5 block text-sm font-semibold text-cream">{t.waPhone}</span>
+                <input
+                  value={waPhone}
+                  onChange={(e) => setWaPhone(e.target.value)}
+                  onBlur={() => setWaTouched(true)}
+                  inputMode="tel"
+                  autoComplete="tel"
+                  dir="ltr"
+                  placeholder="010 1234 5678"
+                  aria-invalid={waTouched && !waPhoneOk}
+                  className={`w-full rounded-lg border bg-ink px-3 py-2.5 text-cream placeholder:text-cream-muted/50 focus:border-gold focus:outline-none ${waTouched && !waPhoneOk ? "border-arcane-bright" : "border-line"}`}
+                />
+                <span className={`mt-1 block text-xs ${waTouched && !waPhoneOk ? "text-arcane-bright" : "text-cream-muted"}`}>{waTouched && !waPhoneOk ? t.waPhoneInvalid : t.waPhoneHint}</span>
+              </label>
+              {waPhoneOk ? (
+                <a
+                  href={whatsappTo(siteConfig.whatsappNumber, orderMessage(catalog, items, locale, dict, waPhone))}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="btn btn-primary w-full py-3.5 text-base"
+                >
+                  <MessageCircle className="h-4 w-4" aria-hidden /> {t.orderWhatsapp}
+                </a>
+              ) : (
+                <button type="button" onClick={() => setWaTouched(true)} aria-disabled="true" className="btn btn-primary w-full py-3.5 text-base opacity-60">
+                  <MessageCircle className="h-4 w-4" aria-hidden /> {t.orderWhatsapp}
+                </button>
+              )}
               <p className="text-xs leading-relaxed text-cream-muted">{t.orderWhatsappHint}</p>
             </>
           ) : (

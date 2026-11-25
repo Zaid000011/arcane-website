@@ -8,10 +8,14 @@ import { tr } from "@/lib/catalog";
 import type { Catalog, FabricKind, PrintMethod } from "@/lib/catalog/types";
 import { artFrom, closeUpFabric, closeUpSize, sampleArt, useCloseUp } from "@/lib/closeup/client";
 import type { DesignSelection } from "@/lib/pricing/types";
+import { STATIC_ROOT } from "@/lib/site-mode";
 import { useI18n } from "@/i18n/client";
 import { fmt } from "@/i18n/format";
 
-/** Every print method explained, each with a close-up on the customer's own garment color and fabric. */
+/** Real close-up photos of each print type (public/print-types). Methods added later fall back to a drawn close-up. */
+const PHOTOS = new Set(["dtf", "dtg", "screen", "puff", "embroidery", "embroidery3d", "sublimation", "vinyl", "vinylSpecial", "wovenPatch", "chenillePatch"]);
+
+/** Every print method explained, each with a real close-up photo of how it looks on fabric. */
 export function PrintTypesDialog({ open, onClose, catalog, design }: { open: boolean; onClose: () => void; catalog: Catalog; design: DesignSelection }) {
   const { dict } = useI18n();
   const t = dict.designer;
@@ -42,9 +46,10 @@ export function PrintTypesDialog({ open, onClose, catalog, design }: { open: boo
 function MethodCard({ method, fabric, color }: { method: PrintMethod; fabric: { id: string; kind: FabricKind }; color: string }) {
   const { locale, dict } = useI18n();
   const t = dict.designer;
+  const photo = PHOTOS.has(method.id);
   const base = closeUpFabric(method, fabric, color);
   const size = closeUpSize(104, 224);
-  const key = `${method.id}|${base.fabricId}|${base.kind}|${base.color}|${size}|sample`;
+  const key = photo ? null : `${method.id}|${base.fabricId}|${base.kind}|${base.color}|${size}|sample`;
   const image = useCloseUp(key, async () => ({
     key: `print|${key}`,
     job: { type: "print", methodId: method.id, fabricId: base.fabricId, kind: base.kind, color: base.color, size, art: artFrom(sampleArt(method.id, base.color, size), size) },
@@ -56,12 +61,24 @@ function MethodCard({ method, fabric, color }: { method: PrintMethod; fabric: { 
   ].filter(Boolean);
 
   return (
-    <li className="flex gap-4 rounded-2xl border border-line bg-ink/50 p-4">
-      <div className="lens-glass relative h-[6.5rem] w-[6.5rem] shrink-0 overflow-hidden rounded-full">
-        <CloseUpCanvas image={image} />
-        <span className="lens-glare" />
-      </div>
-      <div className="min-w-0 flex-1">
+    <li className={`rounded-2xl border border-line bg-ink/50 ${photo ? "overflow-hidden" : "flex gap-4 p-4"}`}>
+      {photo ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={`${STATIC_ROOT}/print-types/${method.id}.webp`}
+          alt={fmt(t.printPhotoAlt, { name: tr(method.name, locale) })}
+          width={720}
+          height={720}
+          loading="lazy"
+          className="aspect-[4/3] w-full object-cover"
+        />
+      ) : (
+        <div className="lens-glass relative h-[6.5rem] w-[6.5rem] shrink-0 overflow-hidden rounded-full">
+          <CloseUpCanvas image={image} />
+          <span className="lens-glare" />
+        </div>
+      )}
+      <div className={`min-w-0 flex-1 ${photo ? "p-4" : ""}`}>
         <div className="flex items-baseline justify-between gap-2">
           <h3 className="font-serif text-lg font-bold text-gold">{tr(method.name, locale)}</h3>
           <span className="shrink-0 text-xs font-semibold text-cream" dir="ltr" title={`${t.priceLevel}: ${t.priceLevels[traits.priceLevel - 1] ?? ""}`}>

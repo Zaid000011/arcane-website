@@ -104,7 +104,7 @@ export function SendRequestForm({ catalog, kind, onKindChange, productId: initia
   };
   const problems = {
     name: name.trim().length < 2,
-    phone: !STATIC_SITE && !normalizePhone(phone),
+    phone: !normalizePhone(phone),
     files: !STATIC_SITE && kind === "design" && designFiles.length === 0,
     color: kind === "color" && !color,
     quantity: quantity.trim() !== "" && !(Number.isInteger(toNumber(quantity)) && toNumber(quantity) >= 1 && toNumber(quantity) <= 100_000),
@@ -382,12 +382,9 @@ export function SendRequestForm({ catalog, kind, onKindChange, productId: initia
         <Field label={t.name} error={show("name") ? t.required : null}>
           <input value={name} onChange={(e) => setName(e.target.value)} maxLength={60} dir="auto" autoComplete="name" className={fieldClass(Boolean(show("name")))} />
         </Field>
-        {/* On WhatsApp we already see their number. */}
-        {STATIC_SITE ? null : (
-          <Field label={t.phone} hint={t.phoneHint} error={show("phone") ? t.phoneInvalid : null}>
-            <input value={phone} onChange={(e) => setPhone(e.target.value)} inputMode="tel" autoComplete="tel" dir="ltr" placeholder={t.phonePlaceholder} className={fieldClass(Boolean(show("phone")))} />
-          </Field>
-        )}
+        <Field label={t.phone} hint={t.phoneHint} error={show("phone") ? t.phoneInvalid : null}>
+          <input value={phone} onChange={(e) => setPhone(e.target.value)} inputMode="tel" autoComplete="tel" dir="ltr" placeholder={t.phonePlaceholder} className={fieldClass(Boolean(show("phone")))} />
+        </Field>
       </div>
 
       <Field label={t.message}>

@@ -1,5 +1,6 @@
 import type { MockupId, Sleeve } from "@/lib/catalog/types";
 import { placementOf } from "@/lib/design/placement";
+import type { RectPlacement } from "@/lib/design/sides";
 import { STATIC_ROOT } from "@/lib/site-mode";
 import { PHOTO_DATA } from "./photo-data";
 
@@ -146,25 +147,62 @@ export function placeOnPhoto(photo: GarmentPhoto, areaId: string, wCm: number, h
     case "hoodSeam":
       if (photo.view !== "back" || !photo.hood) return null;
       return box(photo.hood[0], photo.hood[1], wCm, hCm, px);
-    case "shoulder": {
-      const s = photo.view === "front" ? photo.sleeves?.[p.sleeve === 1 ? "left" : "right"] : undefined;
-      if (!s) return null;
-      const clip = [s.p0, s.pin, s.p2, s.p1];
-      const m0 = mid(s.p0, s.pin);
-      const m1 = mid(s.p1, s.p2);
-      const down = unit(sub(m1, m0));
-      // Long sleeves are measured from the shoulder seam; short ones from where the sleeve starts showing.
-      const start = photo.sleeve === "long" ? add(m0, mul(down, dot(sub(s.p0, m0), down))) : m0;
-      const topCenter = add(start, mul(down, p.downCm * px));
-      // The artwork's right points to the viewer's right, its top toward the shoulder.
-      const right: Pt = [down[1], -down[0]];
-      // A sleeve curves away, so it shows narrower than it is: squeeze wide prints to fit.
-      const fit = chord(clip, add(topCenter, mul(down, (hCm / 2) * px)), right);
-      const squeeze = Math.min(1, (0.82 * fit) / (wCm * px || 1));
-      const ax = mul(right, (px / 10) * squeeze);
-      const ay = mul(down, px / 10);
-      return { origin: sub(topCenter, mul(ax, (wCm * 10) / 2)), ax, ay, wMm: wCm * 10, hMm: hCm * 10, clip };
+    case "shoulder":
+      return sleeveQuad(photo, p.sleeve === 1 ? "left" : "right", p.downCm, 0, wCm, hCm);
+  }
+}
+
+/**
+ * A box on a sleeve of the front photo: its top `downCm` down the sleeve, its
+ * middle `acrossCm` to the viewer's right of the sleeve's middle line.
+ */
+function sleeveQuad(photo: GarmentPhoto, which: "left" | "right", downCm: number, acrossCm: number, wCm: number, hCm: number): PhotoQuad | null {
+  const s = photo.view === "front" ? photo.sleeves?.[which] : undefined;
+  if (!s) return null;
+  const px = photo.px;
+  const clip = [s.p0, s.pin, s.p2, s.p1];
+  const m0 = mid(s.p0, s.pin);
+  const m1 = mid(s.p1, s.p2);
+  const down = unit(sub(m1, m0));
+  // Long sleeves are measured from the shoulder seam; short ones from where the sleeve starts showing.
+  const start = photo.sleeve === "long" ? add(m0, mul(down, dot(sub(s.p0, m0), down))) : m0;
+  // The artwork's right points to the viewer's right, its top toward the shoulder.
+  const right: Pt = [down[1], -down[0]];
+  // A sleeve curves away, so it shows narrower than it is: squeeze wide prints to fit.
+  const middle = add(start, mul(down, (downCm + hCm / 2) * px));
+  const fit = chord(clip, middle, right);
+  const squeeze = Math.min(1, (0.82 * fit) / (wCm * px || 1));
+  const topCenter = add(add(start, mul(down, downCm * px)), mul(right, acrossCm * px * squeeze));
+  const ax = mul(right, (px / 10) * squeeze);
+  const ay = mul(down, px / 10);
+  return { origin: sub(topCenter, mul(ax, (wCm * 10) / 2)), ax, ay, wMm: wCm * 10, hMm: hCm * 10, clip };
+}
+
+/**
+ * Where a free print sits on a photo (its place on its side, from placeRect
+ * in src/lib/design/sides.ts), or null when this photo doesn't show that side.
+ */
+export function placePrintOnPhoto(photo: GarmentPhoto, rp: RectPlacement): PhotoQuad | null {
+  const px = photo.px;
+  switch (rp.side) {
+    case "front": {
+      if (photo.view !== "front") return null;
+      const q = box(photo.neck[0] + rp.cxCm * px, photo.neck[1] + rp.topCm * px, rp.wCm, rp.hCm, px);
+      if (photo.strings) q.over = photo.strings.map(([a, b]) => ({ a, b, r: photo.size * 0.0085 }));
+      return q;
     }
+    case "back":
+      if (photo.view !== "back") return null;
+      return box(photo.neck[0] + rp.cxCm * px, photo.neck[1] + rp.topCm * px, rp.wCm, rp.hCm, px);
+    case "hood": {
+      if (photo.view !== "back" || !photo.hood) return null;
+      // The hood mark is the top middle of a print starting 11 cm above the neck seam.
+      const seamY = photo.hood[1] + 11 * px;
+      return box(photo.hood[0] + rp.cxCm * px, seamY - rp.topCm * px, rp.wCm, rp.hCm, px);
+    }
+    case "leftSleeve":
+    case "rightSleeve":
+      return sleeveQuad(photo, rp.side === "leftSleeve" ? "left" : "right", rp.topCm, rp.cxCm, rp.wCm, rp.hCm);
   }
 }
 

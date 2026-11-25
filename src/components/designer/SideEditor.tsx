@@ -1,14 +1,16 @@
 "use client";
 
 import { useEffect, useId, useLayoutEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
-import { tr } from "@/lib/catalog";
+import { tierLabels, tr } from "@/lib/catalog";
 import type { Catalog } from "@/lib/catalog/types";
-import { findElement, updateElement } from "@/lib/design/elements";
-import { elementBBox, elementSize, measuredFor, MIN_SIZE_MM, printBoxMm, snap } from "@/lib/design/geometry";
+import { boxFor, findElement, updateElement } from "@/lib/design/elements";
+import { elementBBox, elementSize, measuredFor, MIN_SIZE_MM, snap } from "@/lib/design/geometry";
 import { useMeasureStore } from "@/lib/design/measure-store";
+import { isPrintSide, printBounds, sideNames, sidePanel, sideView } from "@/lib/design/sides";
 import { useDesignStore } from "@/lib/design/store";
 import type { DesignElement } from "@/lib/design/types";
-import type { PrintSelection } from "@/lib/pricing/types";
+import type { PlainPhoto } from "@/lib/mockup/stills";
+import type { DesignSelection, PrintSelection } from "@/lib/pricing/types";
 import { useI18n } from "@/i18n/client";
 import { ElementShape } from "./ElementShape";
 
@@ -17,28 +19,57 @@ type Gesture =
   | { kind: "resize"; id: string; startDist: number; startSize: number }
   | { kind: "rotate"; id: string };
 
+/** The plain garment photo behind the editor (front, back and hood), so artwork is placed on the real garment. */
+function usePlainPhoto(catalog: Catalog, design: DesignSelection, side: string): PlainPhoto | null {
+  const [photo, setPhoto] = useState<PlainPhoto | null>(null);
+  const view = sideView(side);
+  const usable = view === "front" || view === "back";
+  const key = `${design.productId}|${design.sleeve}|${design.bodyColorId}|${view}`;
+  useEffect(() => {
+    if (!usable) {
+      setPhoto(null);
+      return;
+    }
+    let live = true;
+    void import("@/lib/mockup/stills")
+      .then(({ plainGarmentPhoto }) => plainGarmentPhoto(catalog, design, view as "front" | "back"))
+      .then((p) => live && setPhoto(p))
+      .catch(() => live && setPhoto(null));
+    return () => {
+      live = false;
+    };
+    // The key covers what the plain photo depends on.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key, usable]);
+  return usable ? photo : null;
+}
+
 /**
- * Flat, true-to-size editor for one print box: drag to move, corner square to
- * resize, top circle to rotate, snapping to the center lines. Units are mm.
- * The 3D garment updates as you edit.
+ * Editor for one side of the garment (front, back, a sleeve or the hood),
+ * true to size and drawn on the garment's photo: every print on the side is
+ * shown, the chosen one can be edited. Drag to move, corner square to
+ * resize, top circle to rotate, snapping to the middle lines. Units are mm.
  */
-export function PrintBoxEditor({ catalog, print, bodyHex }: { catalog: Catalog; print: PrintSelection; bodyHex: string }) {
+export function SideEditor({ catalog, design, print, bodyHex }: { catalog: Catalog; design: DesignSelection; print: PrintSelection; bodyHex: string }) {
   const { locale, dict } = useI18n();
   const t = dict.designer;
-  const area = catalog.printAreas.find((a) => a.id === print.areaId)!;
-  const box = printBoxMm(area, print.tier);
-  const pad = Math.max(box.w, box.h) * 0.07;
+  const product = catalog.products.find((p) => p.id === design.productId);
+  const side = print.areaId;
+  const box = boxFor(catalog, design, print) ?? { w: 100, h: 100 };
+  const pad = Math.max(box.w, box.h) * 0.06;
   const contentRef = useRef<SVGGElement>(null);
   const gesture = useRef<Gesture | null>(null);
   const [guides, setGuides] = useState({ v: false, h: false });
   const [pxPerMm, setPxPerMm] = useState(1);
-  const clipId = `edit-clip-${useId().replace(/[^a-zA-Z0-9_-]/g, "")}`;
+  const clipId = `side-clip-${useId().replace(/[^a-zA-Z0-9_-]/g, "")}`;
   const selection = useDesignStore((s) => s.selection);
   const measurements = useMeasureStore((s) => s.measurements);
+  const onSide = design.prints.filter((p) => p.areaId === side);
   const elements = print.elements ?? [];
-  const selectedId = selection?.areaId === print.areaId ? selection.elementId : null;
+  const selectedId = selection?.printId === print.id ? selection.elementId : null;
   const selected = selectedId ? elements.find((e) => e.id === selectedId) : undefined;
   const handleR = 12 / pxPerMm;
+  const photo = usePlainPhoto(catalog, design, side);
 
   useLayoutEffect(() => {
     const m = contentRef.current?.getScreenCTM();
@@ -66,10 +97,10 @@ export function PrintBoxEditor({ catalog, print, bodyHex }: { catalog: Catalog; 
     gesture.current = g;
   };
 
-  const onElementDown = (e: ReactPointerEvent<SVGGElement>, el: DesignElement) => {
+  const onElementDown = (e: ReactPointerEvent<SVGGElement>, owner: PrintSelection, el: DesignElement) => {
     e.stopPropagation();
-    useDesignStore.getState().select({ areaId: area.id, elementId: el.id });
-    if (el.locked) return;
+    useDesignStore.getState().select({ printId: owner.id, elementId: el.id });
+    if (el.locked || owner.id !== print.id) return;
     const p = toLocal(e);
     if (p) start(e, { kind: "move", id: el.id, start: p, origin: { x: el.x, y: el.y } });
   };
@@ -81,7 +112,7 @@ export function PrintBoxEditor({ catalog, print, bodyHex }: { catalog: Catalog; 
     const state = useDesignStore.getState();
     const d = state.design;
     if (!p || !d) return;
-    const el = findElement(d, area.id, g.id);
+    const el = findElement(d, print.id, g.id);
     if (!el) return;
     const m = useMeasureStore.getState().measurements[el.id];
     if (g.kind === "move") {
@@ -92,16 +123,16 @@ export function PrintBoxEditor({ catalog, print, bodyHex }: { catalog: Catalog; 
       const sx = snap(g.origin.x + p.x - g.start.x + cxOff, box.w / 2, threshold);
       const sy = snap(g.origin.y + p.y - g.start.y + cyOff, box.h / 2, threshold);
       setGuides({ v: sx.snapped, h: sy.snapped });
-      state.setDesign(updateElement(catalog, d, area.id, el.id, { x: sx.value - cxOff, y: sy.value - cyOff }, m));
+      state.setDesign(updateElement(catalog, d, print.id, el.id, { x: sx.value - cxOff, y: sy.value - cyOff }, m));
     } else if (g.kind === "resize") {
       const size = Math.max(MIN_SIZE_MM, g.startSize * (Math.hypot(p.x - el.x, p.y - el.y) / g.startDist));
-      state.setDesign(updateElement(catalog, d, area.id, el.id, el.type === "text" ? { size } : { w: size }, m));
+      state.setDesign(updateElement(catalog, d, print.id, el.id, el.type === "text" ? { size } : { w: size }, m));
     } else {
       let deg = (Math.atan2(p.y - el.y, p.x - el.x) * 180) / Math.PI + 90;
       deg = ((((deg + 180) % 360) + 360) % 360) - 180;
       const nearest = Math.round(deg / 15) * 15;
       if (Math.abs(deg - nearest) < 4) deg = nearest;
-      state.setDesign(updateElement(catalog, d, area.id, el.id, { rotation: Math.round(deg * 10) / 10 }, m));
+      state.setDesign(updateElement(catalog, d, print.id, el.id, { rotation: Math.round(deg * 10) / 10 }, m));
     }
   };
 
@@ -110,16 +141,40 @@ export function PrintBoxEditor({ catalog, print, bodyHex }: { catalog: Catalog; 
     setGuides({ v: false, h: false });
   };
 
+  // Where the garment photo goes, in the panel's millimetres.
+  let backdrop: { href: string; x: number; y: number; w: number; h: number } | null = null;
+  if (photo && product && isPrintSide(side)) {
+    const panel = sidePanel(product.mockup, design.sleeve, side);
+    const px = photo.photo.px;
+    const mmPerPx = 10 / px;
+    let origin: [number, number] | null = null;
+    if (side === "front" || side === "back") origin = [photo.photo.neck[0] - (panel.wCm / 2) * px, photo.photo.neck[1] + panel.topCm * px];
+    else if (side === "hood" && photo.photo.hood) origin = [photo.photo.hood[0] - (panel.wCm / 2) * px, photo.photo.hood[1] + 11 * px - panel.topCm * px];
+    if (origin) {
+      const { scale, dx, dy } = photo.layout;
+      backdrop = {
+        href: photo.url,
+        x: (-dx / scale - origin[0]) * mmPerPx,
+        y: (-dy / scale - origin[1]) * mmPerPx,
+        w: (photo.width / scale) * mmPerPx,
+        h: (photo.height / scale) * mmPerPx,
+      };
+    }
+  }
+
   const selBox = selected ? elementBBox(selected, measuredFor(selected, measurements[selected.id])) : null;
+  // The print's size as priced (the same estimate the server uses).
+  const bounds = printBounds(elements);
+  const label = isPrintSide(side) ? tr(sideNames[side], locale) : side;
 
   return (
-    <div className="overflow-hidden rounded-xl border border-line" style={{ backgroundColor: bodyHex }}>
+    <div className="overflow-hidden rounded-xl border border-line" style={{ backgroundColor: backdrop ? "#120b0c" : bodyHex }}>
       <svg
         viewBox={`${-pad} ${-pad} ${box.w + pad * 2} ${box.h + pad * 2}`}
-        className="mx-auto block h-auto max-h-[44vh] w-full touch-none"
+        className="mx-auto block h-auto max-h-[56vh] w-full touch-none select-none"
         role="group"
-        aria-label={`${tr(area.name, locale)} · ${t.artwork}`}
-        onPointerDown={() => useDesignStore.getState().select({ areaId: area.id, elementId: null })}
+        aria-label={`${label} · ${t.artwork}`}
+        onPointerDown={() => useDesignStore.getState().select({ printId: print.id, elementId: null })}
       >
         <g ref={contentRef}>
           <defs>
@@ -127,27 +182,43 @@ export function PrintBoxEditor({ catalog, print, bodyHex }: { catalog: Catalog; 
               <rect x={0} y={0} width={box.w} height={box.h} />
             </clipPath>
           </defs>
-          <rect x={0} y={0} width={box.w} height={box.h} fill="rgba(255,255,255,0.04)" stroke="#E2C766" strokeWidth={1.2} strokeDasharray="6 4" vectorEffect="non-scaling-stroke" />
+          {backdrop ? <image href={backdrop.href} x={backdrop.x} y={backdrop.y} width={backdrop.w} height={backdrop.h} preserveAspectRatio="none" pointerEvents="none" /> : null}
+          <rect x={0} y={0} width={box.w} height={box.h} fill="rgba(255,255,255,0.03)" stroke="#E2C766" strokeOpacity={0.55} strokeWidth={1} strokeDasharray="4 5" vectorEffect="non-scaling-stroke" pointerEvents="none" />
           <g clipPath={`url(#${clipId})`}>
-            {elements.map((el) => (
-              <g
-                key={el.id}
-                transform={`translate(${el.x} ${el.y}) rotate(${el.rotation})`}
-                role="button"
-                tabIndex={0}
-                aria-pressed={el.id === selectedId}
-                aria-label={el.type === "text" ? el.text : el.type === "image" ? el.name : t.clipartLayer}
-                onPointerDown={(e) => onElementDown(e, el)}
-                onPointerMove={onMove}
-                onPointerUp={onUp}
-                onPointerCancel={onUp}
-                onKeyDown={(e) => e.key === "Enter" && useDesignStore.getState().select({ areaId: area.id, elementId: el.id })}
-                style={{ cursor: el.locked ? "pointer" : "move", touchAction: "none", outline: "none" }}
-              >
-                <ElementShape el={el} missingLabel={t.missingImage} />
-              </g>
-            ))}
+            {onSide.map((owner) => {
+              const active = owner.id === print.id;
+              return (
+                <g key={owner.id} opacity={active ? 1 : 0.5}>
+                  {(owner.elements ?? []).map((el) => (
+                    <g
+                      key={el.id}
+                      transform={`translate(${el.x} ${el.y}) rotate(${el.rotation})`}
+                      role="button"
+                      tabIndex={active ? 0 : -1}
+                      aria-pressed={active && el.id === selectedId}
+                      aria-label={el.type === "text" ? el.text : el.type === "image" ? el.name : t.clipartLayer}
+                      onPointerDown={(e) => onElementDown(e, owner, el)}
+                      onPointerMove={onMove}
+                      onPointerUp={onUp}
+                      onPointerCancel={onUp}
+                      onKeyDown={(e) => e.key === "Enter" && useDesignStore.getState().select({ printId: owner.id, elementId: el.id })}
+                      style={{ cursor: active ? (el.locked ? "pointer" : "move") : "pointer", touchAction: "none", outline: "none" }}
+                    >
+                      <ElementShape el={el} missingLabel={t.missingImage} />
+                    </g>
+                  ))}
+                </g>
+              );
+            })}
           </g>
+          {bounds ? (
+            <g pointerEvents="none">
+              <rect x={bounds.x - 2} y={bounds.y - 2} width={bounds.w + 4} height={bounds.h + 4} fill="none" stroke="#E2C766" strokeWidth={1.2} strokeDasharray="6 4" vectorEffect="non-scaling-stroke" />
+              <text x={bounds.x - 2} y={bounds.y - 2 - 6 / pxPerMm} fontSize={11 / pxPerMm} fill="#E2C766" fontFamily="sans-serif" fontWeight={600}>
+                {`${Math.round(bounds.w / 10)} × ${Math.round(bounds.h / 10)} cm · ${tr(tierLabels[print.tier], locale)}`}
+              </text>
+            </g>
+          ) : null}
           {guides.v ? <line x1={box.w / 2} y1={-pad} x2={box.w / 2} y2={box.h + pad} stroke="#E2C766" strokeWidth={1} vectorEffect="non-scaling-stroke" pointerEvents="none" /> : null}
           {guides.h ? <line x1={-pad} y1={box.h / 2} x2={box.w + pad} y2={box.h / 2} stroke="#E2C766" strokeWidth={1} vectorEffect="non-scaling-stroke" pointerEvents="none" /> : null}
 

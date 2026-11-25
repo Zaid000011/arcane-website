@@ -3,14 +3,14 @@
 import { ArrowLeft, ArrowRight, RotateCcw, Upload } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { areaSide } from "@/lib/design/areas";
 import { ensureCartLoaded, useCartStore } from "@/lib/cart/store";
 import type { Catalog } from "@/lib/catalog/types";
 import { designIssues } from "@/lib/design/checks";
 import { duplicateElement, findElement, fitMeasuredText, removeElement, updateElement } from "@/lib/design/elements";
 import { googleFontsHref } from "@/lib/design/fonts";
 import { useMeasureStore } from "@/lib/design/measure-store";
-import { defaultDesign, normalizeDesign, switchProduct, togglePrint } from "@/lib/design/logic";
+import { defaultDesign, normalizeDesign, switchProduct } from "@/lib/design/logic";
+import { sideView } from "@/lib/design/sides";
 import { DESIGNER_STEPS, useDesignStore, type DesignerStep } from "@/lib/design/store";
 import { effectiveSizes } from "@/lib/order/roster";
 import { emptyOrder } from "@/lib/order/types";
@@ -45,7 +45,7 @@ export function Designer({ catalog, initialProductId }: { catalog: Catalog; init
   const setStep = useDesignStore((s) => s.setStep);
   const setView = useDesignStore((s) => s.setView);
   const select = useDesignStore((s) => s.select);
-  const selectedArea = useDesignStore((s) => s.selection?.areaId);
+  const selectedPrintId = useDesignStore((s) => s.selection?.printId);
   const measurements = useMeasureStore((s) => s.measurements);
   const order = useDesignStore((s) => s.order);
   const editingCartItemId = useDesignStore((s) => s.editingCartItemId);
@@ -98,25 +98,25 @@ export function Designer({ catalog, initialProductId }: { catalog: Catalog; init
       const sel = s.selection;
       const d = s.design;
       if (!sel?.elementId || !d) return;
-      const el = findElement(d, sel.areaId, sel.elementId);
+      const el = findElement(d, sel.printId, sel.elementId);
       if (!el) return;
       if (e.key === "Delete" || e.key === "Backspace") {
         e.preventDefault();
-        s.commit(removeElement(d, sel.areaId, el.id));
-        s.select({ areaId: sel.areaId, elementId: null });
+        s.commit(removeElement(d, sel.printId, el.id));
+        s.select({ printId: sel.printId, elementId: null });
       } else if (mod && key === "d") {
         e.preventDefault();
-        const r = duplicateElement(catalog, d, sel.areaId, el.id);
+        const r = duplicateElement(catalog, d, sel.printId, el.id);
         s.commit(r.design);
-        if (r.newId) s.select({ areaId: sel.areaId, elementId: r.newId });
+        if (r.newId) s.select({ printId: sel.printId, elementId: r.newId });
       } else if (e.key === "Escape") {
-        s.select({ areaId: sel.areaId, elementId: null });
+        s.select({ printId: sel.printId, elementId: null });
       } else if (!el.locked) {
         const n = e.shiftKey ? 10 : 1;
         const delta = ({ ArrowLeft: [-n, 0], ArrowRight: [n, 0], ArrowUp: [0, -n], ArrowDown: [0, n] } as Record<string, [number, number]>)[e.key];
         if (!delta) return;
         e.preventDefault();
-        s.commit(updateElement(catalog, d, sel.areaId, el.id, { x: el.x + delta[0], y: el.y + delta[1] }, useMeasureStore.getState().measurements[el.id]), `nudge:${el.id}`);
+        s.commit(updateElement(catalog, d, sel.printId, el.id, { x: el.x + delta[0], y: el.y + delta[1] }, useMeasureStore.getState().measurements[el.id]), `nudge:${el.id}`);
       }
     };
     window.addEventListener("keydown", onKey);
@@ -145,13 +145,15 @@ export function Designer({ catalog, initialProductId }: { catalog: Catalog; init
     }
   };
 
-  /** Turns the 3D garment to the area and brings its card into view. */
-  const focusArea = (areaId: string) => {
-    setView(areaSide(areaId));
+  /** Turns the garment to a print's side, picks the print and brings its card into view. */
+  const focusPrint = (printId: string) => {
+    const print = useDesignStore.getState().design?.prints.find((p) => p.id === printId);
+    if (!print) return;
+    setView(sideView(print.areaId));
     if (step !== "prints") setStep("prints");
     const current = useDesignStore.getState().selection;
-    if (current?.areaId !== areaId) select({ areaId, elementId: null });
-    requestAnimationFrame(() => document.getElementById(`area-${areaId}`)?.scrollIntoView({ behavior: "smooth", block: "nearest" }));
+    if (current?.printId !== printId) select({ printId, elementId: null });
+    requestAnimationFrame(() => document.getElementById(`print-${printId}`)?.scrollIntoView({ behavior: "smooth", block: "nearest" }));
   };
 
   const addToCart = async (asNew: boolean) => {
@@ -168,8 +170,8 @@ export function Designer({ catalog, initialProductId }: { catalog: Catalog; init
   const panelProps = { catalog, design, product, update };
   const editing = step === "prints";
   // The fabric step shows a magnifying glass; the print step pulls the chosen print out into a close-up.
-  const closeUpArea = design.prints.some((p) => p.areaId === selectedArea) ? selectedArea : design.prints[0]?.areaId;
-  const closeUp: CloseUpView | null = step === "fabric" ? { type: "fabric" } : step === "prints" && closeUpArea ? { type: "print", areaId: closeUpArea } : null;
+  const closeUpPrint = design.prints.some((p) => p.id === selectedPrintId) ? selectedPrintId : design.prints[0]?.id;
+  const closeUp: CloseUpView | null = step === "fabric" ? { type: "fabric" } : step === "prints" && closeUpPrint ? { type: "print", printId: closeUpPrint } : null;
 
   return (
     <div className="section pt-6 pb-28 lg:pb-12">
@@ -230,7 +232,7 @@ export function Designer({ catalog, initialProductId }: { catalog: Catalog; init
           {step === "garment" && <GarmentPanel {...panelProps} />}
           {step === "fabric" && <FabricPanel {...panelProps} />}
           {step === "colors" && <ColorsPanel {...panelProps} onSendColor={() => setSendKind("color")} />}
-          {step === "prints" && <PrintsPanel {...panelProps} onFocusArea={focusArea} onExplainPrints={() => setExplainPrints(true)} />}
+          {step === "prints" && <PrintsPanel {...panelProps} onFocusPrint={focusPrint} onExplainPrints={() => setExplainPrints(true)} />}
           {step === "names" && <PersonalizationPanel {...panelProps} />}
           {step === "sizes" && <SizesPanel catalog={catalog} design={design} quote={quote} onSendSize={() => setSendKind("size")} />}
           {step === "review" && (

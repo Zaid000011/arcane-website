@@ -6,6 +6,7 @@ import { assetUrl } from "@/lib/design/assets";
 import { clipartById } from "@/lib/design/clipart";
 import { fontById, hasArabic } from "@/lib/design/fonts";
 import { namesGrid } from "@/lib/design/personalization";
+import type { LocalBBox } from "@/lib/design/geometry";
 import type { DesignElement, TextElement } from "@/lib/design/types";
 import type { PersonalStyle } from "@/lib/pricing/types";
 
@@ -180,6 +181,12 @@ export async function drawPrintCanvas(elements: DesignElement[], wMm: number, hM
     ctx.restore();
   }
   return canvas;
+}
+
+/** A print's artwork cut to a rectangle of its panel (mm), ready to lay on the garment. */
+export function drawPrintRect(elements: DesignElement[], rect: LocalBBox, patch: PatchStyle = null): Promise<HTMLCanvasElement> {
+  const shifted = elements.map((el) => ({ ...el, x: el.x - rect.x, y: el.y - rect.y }));
+  return drawPrintCanvas(shifted, rect.w, rect.h, patch);
 }
 
 /** Dashed outline shown where a print will go before artwork is added. */

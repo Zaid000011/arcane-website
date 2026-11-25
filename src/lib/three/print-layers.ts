@@ -1,10 +1,13 @@
 import * as THREE from "three";
-import type { Catalog, SizeTier } from "@/lib/catalog/types";
-import { tierBoxCm } from "@/lib/design/geometry";
+import type { Catalog } from "@/lib/catalog/types";
+import { withFreePrints } from "@/lib/design/logic";
+import { useMeasureStore } from "@/lib/design/measure-store";
 import { placementOf } from "@/lib/design/placement";
-import type { DesignSelection, PersonalStyle } from "@/lib/pricing/types";
+import { areaRect, isPrintSide, panelBox, placeRect, printRenderRect, type RectPlacement } from "@/lib/design/sides";
+import type { DesignSelection, PersonalStyle, PrintSelection } from "@/lib/pricing/types";
 import { disposeGroup, type GarmentBuild } from "./garment";
-import { drawNamesList, drawNeckLabel, drawPersonalText, drawPrintCanvas, placeholderCanvas, type PatchStyle } from "./print-canvas";
+import { modelAnchor, modelDecal, type DecalLook } from "./model";
+import { drawNamesList, drawNeckLabel, drawPersonalText, drawPrintRect, placeholderCanvas, type PatchStyle } from "./print-canvas";
 import { bodySample, HOOD_HEIGHT, HOOD_OPEN, hoodPoint, sleeveAt, sleevePoint, sleevePrintTheta, sleeveRadius, type GarmentSpec, type Vec3 } from "./shape";
 import type { GarmentStage } from "./stage";
 import { chenilleNormal, glitterNormal, knitNormal, threadNormal, weaveNormal } from "./textures";
@@ -72,17 +75,42 @@ function placementFor(s: GarmentSpec, areaId: string, long: boolean): Placement 
   }
 }
 
+/** Where a free print sits on the 3D garment (see placeRect in src/lib/design/sides.ts). */
+function placementForRect(s: GarmentSpec, rp: RectPlacement): Placement {
+  switch (rp.side) {
+    case "front":
+      return { surface: { kind: "front" }, cx: rp.cxCm, top: -s.frontNeckDrop - rp.topCm };
+    case "back":
+      return { surface: { kind: "back" }, cx: rp.cxCm, top: -s.backNeckDrop - rp.topCm };
+    case "leftSleeve":
+      return { surface: { kind: "sleeve", side: 1 }, cx: rp.cxCm, top: rp.topCm };
+    case "rightSleeve":
+      return { surface: { kind: "sleeve", side: -1 }, cx: rp.cxCm, top: rp.topCm };
+    case "hood":
+      return { surface: { kind: "hood" }, cx: rp.cxCm, top: rp.topCm };
+  }
+}
+
+/** Where a print sits on its side, as laid on the garment: its picture's rectangle on the panel. */
+function printPlacement(catalog: Catalog, design: DesignSelection, print: PrintSelection, pad = 2) {
+  const product = catalog.products.find((p) => p.id === design.productId);
+  if (!product || !isPrintSide(print.areaId)) return null;
+  const panel = panelBox(product.mockup, design.sleeve, print.areaId);
+  const rect = printRenderRect(print.elements, panel, useMeasureStore.getState().measurements, pad);
+  return { rect, rp: placeRect(product.mockup, design.sleeve, print.areaId, rect) };
+}
+
 type Sampler = (x: number, y: number) => { p: Vec3; n: Vec3 };
 
 /** Maps print coordinates (x right, y down from the top edge, cm) to a point and normal on the garment. */
-function samplerFor(build: GarmentBuild, pl: Placement): Sampler {
+function samplerFor(build: GarmentBuild, pl: Placement, hCm = 16): Sampler {
   const s = build.spec;
   const surf = pl.surface;
   if (surf.kind === "front") return (x, y) => bodySample(s, pl.cx + x, pl.top - y, "front");
   if (surf.kind === "back") return (x, y) => bodySample(s, -(pl.cx + x), pl.top - y, "back");
   if (surf.kind === "sleeve") {
     const path = surf.side === 1 ? build.sleeves.left : build.sleeves.right;
-    const mid = pl.top + 8;
+    const mid = pl.top + Math.min(hCm / 2, 15);
     const theta0 = sleevePrintTheta(path, mid);
     // Make "right" in the artwork point toward the viewer's right when seen from the front.
     const f = sleeveAt(path, mid);
@@ -174,7 +202,7 @@ function heightGrid(canvas: HTMLCanvasElement, nx: number, ny: number, blur: num
 }
 
 function buildPrintMesh(build: GarmentBuild, pl: Placement, wCm: number, hCm: number, canvas: HTMLCanvasElement, look: Look, lift = 0.1): THREE.Mesh {
-  const sample = samplerFor(build, pl);
+  const sample = samplerFor(build, pl, hCm);
   const nx = Math.min(170, Math.max(16, Math.round(wCm * 5)));
   const ny = Math.min(230, Math.max(16, Math.round(hCm * 5)));
   const heights = look.height > 0 ? heightGrid(canvas, nx, ny, look.blur, Boolean(look.patch)) : null;
@@ -242,14 +270,17 @@ function buildPrintMesh(build: GarmentBuild, pl: Placement, wCm: number, hCm: nu
   return m;
 }
 
-/** The middle of a print area on the 3D garment and the way it faces (where the close-up callout points). */
-export function areaAnchor(build: GarmentBuild, catalog: Catalog, areaId: string, tier: SizeTier): { p: Vec3; n: Vec3 } | null {
-  const area = catalog.printAreas.find((a) => a.id === areaId);
-  const pl = area ? placementFor(build.spec, area.id, build.long) : null;
-  if (!area || !pl) return null;
-  const [, hCm] = tierBoxCm(area, tier);
-  return samplerFor(build, pl)(0, hCm / 2);
+/** The middle of a print on the 3D garment and the way it faces (where the close-up callout points). */
+export function printAnchor(stage: GarmentStage, catalog: Catalog, design: DesignSelection, print: PrintSelection): { p: Vec3; n: Vec3 } | null {
+  const where = printPlacement(catalog, design, print);
+  if (!where) return null;
+  if (stage.model) return modelAnchor(stage.model, where.rp);
+  if (!stage.garment) return null;
+  const pl = placementForRect(stage.garment.spec, where.rp);
+  return samplerFor(stage.garment, pl, where.rp.hCm)(0, where.rp.hCm / 2);
 }
+
+const decalLook = (look: Look): DecalLook => ({ roughness: look.roughness, metalness: look.metalness, clearcoat: look.clearcoat, sheen: look.sheen });
 
 export interface PrintSamples {
   name?: string;
@@ -266,45 +297,61 @@ export async function updatePrintLayers(
   opts: { placeholders?: boolean; samples?: PrintSamples; nameFallback?: string; numberFallback?: string } = {},
 ): Promise<void> {
   const build = stage.garment;
-  if (!build) return;
+  const model = stage.model;
+  if (!build && !model) return;
+  design = withFreePrints(catalog, design);
   const version = (versions.get(stage) ?? 0) + 1;
   versions.set(stage, version);
   const meshes: THREE.Mesh[] = [];
 
   for (const print of design.prints) {
-    const area = catalog.printAreas.find((a) => a.id === print.areaId);
-    const pl = area ? placementFor(build.spec, area.id, build.long) : null;
-    if (!area || !pl) continue;
-    const [wCm, hCm] = tierBoxCm(area, print.tier);
     const look = lookFor(print.methodId);
+    const where = printPlacement(catalog, design, print, look.patch ? 6 : 2);
+    if (!where) continue;
+    const { rect, rp } = where;
     const elements = print.elements ?? [];
     let canvas: HTMLCanvasElement | null = null;
-    if (elements.length || look.patch) canvas = await drawPrintCanvas(elements, wCm * 10, hCm * 10, look.patch ?? null);
-    else if (opts.placeholders) canvas = placeholderCanvas(wCm * 10, hCm * 10);
+    if (elements.length || look.patch) canvas = await drawPrintRect(elements, rect, look.patch ?? null);
+    else if (opts.placeholders) canvas = placeholderCanvas(rect.w, rect.h);
     if (!canvas) continue;
-    meshes.push(buildPrintMesh(build, pl, wCm, hCm, canvas, elements.length || look.patch ? look : { height: 0, blur: 0, roughness: 0.9 }));
+    const finish = elements.length || look.patch ? look : { height: 0, blur: 0, roughness: 0.9 };
+    if (model) {
+      const decal = modelDecal(model, rp, canvas, decalLook(finish), meshes.length);
+      if (decal) meshes.push(decal);
+    } else if (build) {
+      meshes.push(buildPrintMesh(build, placementForRect(build.spec, rp), rp.wCm, rp.hCm, canvas, finish));
+    }
   }
 
   const p = design.personalization;
   const personal = async (style: PersonalStyle | undefined, draw: (w: number, h: number) => Promise<HTMLCanvasElement>, methodId: string) => {
     if (!style) return;
     const area = catalog.printAreas.find((a) => a.id === style.areaId);
-    const pl = area ? placementFor(build.spec, area.id, build.long) : null;
-    if (!area || !pl) return;
+    if (!area) return;
+    if (model) {
+      const rp = areaRect(area.id, design.sleeve, area.widthCm, area.heightCm);
+      if (!rp) return;
+      const decal = modelDecal(model, rp, await draw(area.widthCm * 10, area.heightCm * 10), decalLook(lookFor(methodId)), meshes.length);
+      if (decal) meshes.push(decal);
+      return;
+    }
+    const pl = build ? placementFor(build.spec, area.id, build.long) : null;
+    if (!build || !pl) return;
     const canvas = await draw(area.widthCm * 10, area.heightCm * 10);
     meshes.push(buildPrintMesh(build, pl, area.widthCm, area.heightCm, canvas, lookFor(methodId), 0.16));
   };
   if (p.namesList) await personal(p.namesListStyle, (w, h) => drawNamesList(p.namesListNames ?? [], p.namesListStyle!, w, h), "screen");
   if (p.numbers) await personal(p.numberStyle, (w, h) => drawPersonalText(opts.samples?.number || opts.numberFallback || "10", p.numberStyle!, w, h), "vinyl");
   if (p.names) await personal(p.nameStyle, (w, h) => drawPersonalText(opts.samples?.name || opts.nameFallback || "YOUR NAME", p.nameStyle!, w, h), "vinyl");
-  if (p.neckLabel) {
+  // The neck label sits inside the drawn garment's neck (the real models have no inside there).
+  if (p.neckLabel && build) {
     const s = build.spec;
     const label = buildPrintMesh(build, { surface: { kind: "back" }, cx: 0, top: -s.backNeckDrop - 1.5 }, 5, 2, drawNeckLabel(p.neckLabelText ?? ""), { height: 0, blur: 0, roughness: 0.7 }, -0.25);
     (label.material as THREE.MeshPhysicalMaterial).side = THREE.BackSide;
     meshes.push(label);
   }
 
-  if (versions.get(stage) !== version || stage.garment !== build) {
+  if (versions.get(stage) !== version || stage.garment !== build || stage.model !== model) {
     for (const m of meshes) disposeGroup(m);
     return;
   }

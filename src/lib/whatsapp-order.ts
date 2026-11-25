@@ -1,4 +1,5 @@
 import type { CartItem } from "@/lib/cart/store";
+import { normalizePhone } from "@/lib/group/rules";
 import { tr } from "@/lib/catalog";
 import type { Catalog, Locale } from "@/lib/catalog/types";
 import { priceItem } from "@/lib/checkout/plan";
@@ -16,10 +17,10 @@ import { fmt, formatMoney } from "@/i18n/format";
 const MAX_PEOPLE = 60;
 
 /** The whole cart as one WhatsApp message: each piece, its sizes and price, and the total. */
-export function orderMessage(catalog: Catalog, items: CartItem[], locale: Locale, dict: Dictionary): string {
+export function orderMessage(catalog: Catalog, items: CartItem[], locale: Locale, dict: Dictionary, phone: string): string {
   const t = dict.cart;
   const d = dict.designer;
-  const lines: string[] = [t.waIntro, ""];
+  const lines: string[] = [t.waIntro, fmt(t.waPhoneLine, { phone: normalizePhone(phone) ?? phone }), ""];
   let total = 0;
   let images = false;
   items.forEach((item, index) => {
@@ -49,11 +50,12 @@ export function orderMessage(catalog: Catalog, items: CartItem[], locale: Locale
 }
 
 /** A "send it to us" request as a WhatsApp message (files are attached in the chat itself). */
-export function requestMessage(catalog: Catalog, r: Omit<CustomRequestInput, "phone" | "locale">, locale: Locale, dict: Dictionary): string {
+export function requestMessage(catalog: Catalog, r: Omit<CustomRequestInput, "locale">, locale: Locale, dict: Dictionary): string {
   const t = dict.send;
   const product = catalog.products.find((p) => p.id === r.productId);
   const lines = [t.waIntro[r.kind], ""];
   lines.push(`${t.name}: ${r.name}`);
+  lines.push(`${t.phone}: ${normalizePhone(r.phone) ?? r.phone}`);
   lines.push(`${t.garment}: ${product ? tr(product.name, locale) : t.garmentAny}`);
   if (r.quantity) lines.push(`${t.waQuantity}: ${r.quantity}`);
   if (r.color) lines.push(`${t.colorCode}: ${r.color.hex}${r.color.name ? ` (${r.color.name})` : ""}`);

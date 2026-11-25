@@ -7,6 +7,8 @@ import type { Catalog } from "@/lib/catalog/types";
 import type { OrderItem } from "@/lib/checkout/types";
 import { clipartById } from "@/lib/design/clipart";
 import { describeDesign, describeSizes } from "@/lib/design/describe";
+import { withFreePrints } from "@/lib/design/logic";
+import { isPrintSide, sideNames } from "@/lib/design/sides";
 import { fontById } from "@/lib/design/fonts";
 import { imageDpi } from "@/lib/design/geometry";
 import type { DesignElement } from "@/lib/design/types";
@@ -80,13 +82,14 @@ export function TeamOrderItems({ code, items, catalog }: { code: string; items: 
                 </div>
                 {item.design.prints.length ? (
                   <ul className="space-y-2">
-                    {item.design.prints.map((print) => {
-                      const area = catalog.printAreas.find((a) => a.id === print.areaId);
+                    {withFreePrints(catalog, item.design).prints.map((print, i, all) => {
+                      const n = all.slice(0, i + 1).filter((p) => p.areaId === print.areaId).length;
+                      const side = isPrintSide(print.areaId) ? tr(sideNames[print.areaId], "en") : print.areaId;
                       const method = catalog.printMethods.find((m) => m.id === print.methodId);
                       return (
-                        <li key={print.areaId} className="rounded-lg bg-ink px-3 py-2">
+                        <li key={print.id} className="rounded-lg bg-ink px-3 py-2">
                           <p className="font-semibold text-cream">
-                            {area ? tr(area.name, "en") : print.areaId} · {method ? tr(method.name, "en") : print.methodId} · {tr(tierLabels[print.tier], "en")}
+                            {n > 1 ? `${side} ${n}` : side} · {method ? tr(method.name, "en") : print.methodId} · {tr(tierLabels[print.tier], "en")}
                             {print.colorCount ? ` · ${print.colorCount} colors` : ""}
                           </p>
                           <ul className="mt-1 space-y-0.5 text-cream-muted">

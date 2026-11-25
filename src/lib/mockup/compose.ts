@@ -1,10 +1,12 @@
 import type { Catalog } from "@/lib/catalog/types";
-import { hexToLinear, srgbToLinear } from "@/lib/closeup/surface";
-import { tierBoxCm } from "@/lib/design/geometry";
+import { withFreePrints } from "@/lib/design/logic";
+import { useMeasureStore } from "@/lib/design/measure-store";
+import { isPrintSide, panelBox, placeRect, printRenderRect } from "@/lib/design/sides";
 import type { DesignSelection } from "@/lib/pricing/types";
 import type { PrintSamples } from "@/lib/three/print-layers";
-import { drawNamesList, drawNeckLabel, drawPersonalText, drawPrintCanvas, placeholderCanvas, type PatchStyle } from "@/lib/three/print-canvas";
-import { garmentPhoto, labelOnPhoto, photoUrl, placeOnPhoto, type GarmentPhoto, type PhotoQuad, type PhotoView, type Pt } from "./photos";
+import { drawNamesList, drawNeckLabel, drawPersonalText, drawPrintRect, placeholderCanvas, type PatchStyle } from "@/lib/three/print-canvas";
+import { clamp01, encode, garmentLut, LIN, LUT_STEPS, SHADE_MAX, shoulder, smoothstep } from "./shade";
+import { garmentPhoto, labelOnPhoto, photoUrl, placeOnPhoto, placePrintOnPhoto, type GarmentPhoto, type PhotoQuad, type PhotoView, type Pt } from "./photos";
 
 /**
  * Draws a design on a real garment photo, in the browser:
@@ -43,49 +45,6 @@ export interface Composed {
   image: ImageData;
   layout: PhotoLayout;
   photo: GarmentPhoto;
-}
-
-/* ---------- color math ---------- */
-
-const LIN = new Float32Array(256).map((_, v) => srgbToLinear(v / 255));
-const ENC_STEPS = 4095;
-const ENC = new Uint8ClampedArray(ENC_STEPS + 1).map((_, i) => {
-  const c = i / ENC_STEPS;
-  return Math.round(255 * (c <= 0.0031308 ? c * 12.92 : 1.055 * c ** (1 / 2.4) - 0.055));
-});
-const encode = (v: number) => ENC[v <= 0 ? 0 : v >= 1 ? ENC_STEPS : (v * ENC_STEPS) | 0]!;
-const clamp01 = (v: number) => (v < 0 ? 0 : v > 1 ? 1 : v);
-const smoothstep = (a: number, b: number, v: number) => {
-  const t = clamp01((v - a) / (b - a));
-  return t * t * (3 - 2 * t);
-};
-/** Keeps detail in the brightest whites instead of clipping them. */
-const shoulder = (v: number) => (v < 0.8 ? v : 0.8 + 0.2 * (1 - Math.exp(-(v - 0.8) / 0.2)));
-
-const SHADE_MAX = 1.3;
-const LUT_STEPS = 1023;
-
-/**
- * Garment color for every amount of light, as sRGB bytes. Very dark colors
- * are lifted a little and get deeper folds plus a soft sheen, the way black
- * cotton looks in a product photo instead of a flat black hole.
- */
-function garmentLut(hex: string): Uint8ClampedArray {
-  const [r, g, b] = hexToLinear(hex);
-  const lum = 0.2126 * r + 0.7152 * g + 0.0722 * b;
-  const lifted = lum + 0.02 * (1 - lum) ** 6;
-  const k = lum > 1e-5 ? lifted / lum : 0;
-  const c = lum > 1e-5 ? [r * k, g * k, b * k] : [lifted, lifted, lifted];
-  const depth = 1 + 2.6 * (1 - lifted) ** 8;
-  const sheen = 0.12 * (1 - lifted) ** 4;
-  const out = new Uint8ClampedArray((LUT_STEPS + 1) * 3);
-  for (let i = 0; i <= LUT_STEPS; i++) {
-    const e = (i / LUT_STEPS) * SHADE_MAX;
-    const f = e ** depth;
-    const s = sheen * Math.max(0, e - 0.85) ** 2;
-    for (let ch = 0; ch < 3; ch++) out[i * 3 + ch] = encode(shoulder(c[ch]! * f + s));
-  }
-  return out;
 }
 
 /* ---------- loading ---------- */
@@ -486,7 +445,8 @@ const DEFAULT_PAD = { top: 0.05, bottom: 0.05, side: 0.05 };
 
 /** The design drawn on its garment photo, or null when there's no photo for it. */
 export async function composeGarmentPhoto(o: ComposeOptions): Promise<Composed | null> {
-  const { catalog, design } = o;
+  const { catalog } = o;
+  const design = withFreePrints(catalog, o.design);
   const product = catalog.products.find((p) => p.id === design.productId) ?? catalog.products[0]!;
   const photo = garmentPhoto(product.mockup, design.sleeve, o.view);
   if (!photo || o.width < 2 || o.height < 2) return null;
@@ -495,16 +455,16 @@ export async function composeGarmentPhoto(o: ComposeOptions): Promise<Composed |
 
   const basePromise = getBase(photo, color, Math.round(o.width), Math.round(o.height), pad);
   const layers: Layer[] = [];
+  const measurements = useMeasureStore.getState().measurements;
   for (const print of design.prints) {
-    const area = catalog.printAreas.find((a) => a.id === print.areaId);
-    if (!area) continue;
-    const [wCm, hCm] = tierBoxCm(area, print.tier);
-    const quad = placeOnPhoto(photo, area.id, wCm, hCm);
-    if (!quad) continue;
+    if (!isPrintSide(print.areaId)) continue;
     const look = photoLook(print.methodId);
     const elements = print.elements ?? [];
-    if (elements.length || look.patch) layers.push({ quad, look, art: await drawPrintCanvas(elements, wCm * 10, hCm * 10, look.patch ?? null) });
-    else if (o.placeholders) layers.push({ quad, look: null, art: placeholderCanvas(wCm * 10, hCm * 10) });
+    const rect = printRenderRect(elements, panelBox(product.mockup, design.sleeve, print.areaId), measurements, look.patch ? 6 : 2);
+    const quad = placePrintOnPhoto(photo, placeRect(product.mockup, design.sleeve, print.areaId, rect));
+    if (!quad) continue;
+    if (elements.length || look.patch) layers.push({ quad, look, art: await drawPrintRect(elements, rect, look.patch ?? null) });
+    else if (o.placeholders) layers.push({ quad, look: null, art: placeholderCanvas(rect.w, rect.h) });
   }
 
   const p = design.personalization;

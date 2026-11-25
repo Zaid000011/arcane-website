@@ -3,9 +3,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { CloseUpOverlay, type CloseUpTarget, type CloseUpView } from "@/components/three/CloseUpOverlay";
 import type { Catalog } from "@/lib/catalog/types";
-import { tierBoxCm } from "@/lib/design/geometry";
+import { useMeasureStore } from "@/lib/design/measure-store";
+import { isPrintSide, panelBox, placeRect, printRenderRect } from "@/lib/design/sides";
 import { composeGarmentPhoto, type Composed } from "@/lib/mockup/compose";
-import { photoViewFor, placeOnPhoto, quadCenter } from "@/lib/mockup/photos";
+import { photoViewFor, placePrintOnPhoto, quadCenter } from "@/lib/mockup/photos";
 import type { DesignSelection } from "@/lib/pricing/types";
 import type { PrintSamples } from "@/lib/three/print-layers";
 import type { StageView } from "@/lib/three/stage";
@@ -100,13 +101,13 @@ export default function PhotoGarment({
   const target = useMemo<CloseUpTarget>(
     () => ({
       element: () => canvasRef.current,
-      locate(areaId, tier) {
+      locate(print, design) {
         const d = drawn.current;
         const canvas = canvasRef.current;
-        const area = catalog.printAreas.find((a) => a.id === areaId);
-        if (!d || !canvas || !canvas.width || !area) return null;
-        const [w, h] = tierBoxCm(area, tier);
-        const quad = placeOnPhoto(d.photo, areaId, w, h);
+        const product = catalog.products.find((p) => p.id === design.productId);
+        if (!d || !canvas || !canvas.width || !product || !isPrintSide(print.areaId)) return null;
+        const rect = printRenderRect(print.elements, panelBox(product.mockup, design.sleeve, print.areaId), useMeasureStore.getState().measurements);
+        const quad = placePrintOnPhoto(d.photo, placeRect(product.mockup, design.sleeve, print.areaId, rect));
         if (!quad) return null;
         const [x, y] = quadCenter(quad);
         const k = canvas.clientWidth / canvas.width;

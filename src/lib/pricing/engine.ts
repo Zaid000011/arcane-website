@@ -1,5 +1,6 @@
-import { sleeveLabels, tierAtMost, tierLabels } from "@/lib/catalog";
+import { sleeveLabels, tierLabels } from "@/lib/catalog";
 import type { Catalog, Color, LocalizedText } from "@/lib/catalog/types";
+import { isPrintSide, MAX_PRINTS_PER_SIDE, maxTierOf, printTier, sideNames, sidesFor } from "@/lib/design/sides";
 import type {
   DesignSelection,
   OrderSelection,
@@ -86,36 +87,33 @@ export function quote(catalog: Catalog, design: DesignSelection, order: OrderSel
     }
   }
 
-  // Prints
-  const usedAreas = new Set<string>();
+  // Prints: anywhere on the garment's sides, several per side, each priced by its size.
+  const sides = sidesFor(product.mockup);
+  const perSide = new Map<string, number>();
   for (const print of design.prints) {
-    const area = product.printAreaIds.includes(print.areaId)
-      ? catalog.printAreas.find((a) => a.id === print.areaId)
-      : undefined;
+    const side = print.areaId;
+    if (!isPrintSide(side) || !sides.includes(side)) {
+      error("invalidArea", { areaId: side });
+      continue;
+    }
+    const n = (perSide.get(side) ?? 0) + 1;
+    perSide.set(side, n);
+    if (n > MAX_PRINTS_PER_SIDE) {
+      error("duplicateArea", { areaId: side, max: MAX_PRINTS_PER_SIDE });
+      continue;
+    }
     const method = catalog.printMethods.find((m) => m.id === print.methodId);
-    if (!area) {
-      error("invalidArea", { areaId: print.areaId });
-      continue;
-    }
-    if (usedAreas.has(area.id)) {
-      error("duplicateArea", { areaId: area.id });
-      continue;
-    }
-    usedAreas.add(area.id);
     if (!method) {
       error("invalidMethod", { methodId: print.methodId });
       continue;
     }
 
-    const maxTier = design.sleeve === "short" && area.maxTierShortSleeve ? area.maxTierShortSleeve : area.maxTier;
+    // The size always comes from the artwork itself, never from what the browser says.
+    const tier = printTier(print);
     let ok = true;
-    if (!tierAtMost(print.tier, maxTier)) {
-      error("tierTooLarge", { areaId: area.id, tier: print.tier, maxTier });
-      ok = false;
-    }
-    const tierPrice = method.prices[print.tier];
+    const tierPrice = method.prices[tier];
     if (tierPrice === undefined) {
-      error("tierNotOffered", { methodId: method.id, tier: print.tier });
+      error("printTooBig", { areaId: side, methodId: method.id, tier, maxTier: maxTierOf(method) });
       ok = false;
     }
     if (method.fabricKinds && fabric && !method.fabricKinds.includes(fabric.kind)) {
@@ -136,11 +134,12 @@ export function quote(catalog: Catalog, design: DesignSelection, order: OrderSel
     methodsUsed.add(method.id);
     maxExtraDays = Math.max(maxExtraDays, method.extraDays);
 
+    const sideLabel = n > 1 ? L(`${sideNames[side].en} ${n}`, `${sideNames[side].ar} ${n}`) : sideNames[side];
     const colorNote = method.pricedPerColor ? [colorCountLabel(colors)] : [];
-    unit(`print:${area.id}`, "print", join(area.name, method.name, tierLabels[print.tier], ...colorNote), tierPrice * colors);
+    unit(`print:${print.id}`, "print", join(sideLabel, method.name, tierLabels[tier], ...colorNote), tierPrice * colors);
     if (method.setupFee > 0) {
       const setupAmount = method.setupFee * (method.setupPerColor ? colors : 1);
-      once(`setup:${area.id}`, join(L("Setup", "تجهيز"), method.name, area.name, ...colorNote), setupAmount);
+      once(`setup:${print.id}`, join(L("Setup", "تجهيز"), method.name, sideLabel, ...colorNote), setupAmount);
     }
   }
 

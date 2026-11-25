@@ -4,7 +4,7 @@ import path from "node:path";
 import { beforeEach, describe, expect, it } from "vitest";
 import { seedCatalog } from "@/lib/catalog/seed";
 import { addElement, newImageElement } from "@/lib/design/elements";
-import { defaultDesign, togglePrint } from "@/lib/design/logic";
+import { addPrint, defaultDesign } from "@/lib/design/logic";
 import { togglePersonal } from "@/lib/design/personalization";
 import type { CreateGroupInput } from "@/lib/validation";
 import { createGroupSchema } from "@/lib/validation";
@@ -68,9 +68,9 @@ describe("creating a group", () => {
   });
 
   it("needs uploaded artwork to exist on the server", () => {
-    let design = togglePrint(seedCatalog, defaultDesign(seedCatalog, "hoodie"), "frontCenter");
+    const added = addPrint(seedCatalog, defaultDesign(seedCatalog, "hoodie"), "front");
     const img = newImageElement({ w: 210, h: 300 }, { assetId: "test-asset-0001", name: "logo.png", pxW: 3000, pxH: 3000, vector: false });
-    design = addElement(seedCatalog, design, "frontCenter", img);
+    const design = addElement(seedCatalog, added.design, added.printId!, img);
     expect(fails(() => createGroup(input({ design }), NOW))).toBe("missingAssets");
     expect(saveAsset("test-asset-0001", PNG)).toBe("saved");
     expect(createGroup(input({ design }), NOW).code).toMatch(/^[A-Z2-9]{6}$/);
