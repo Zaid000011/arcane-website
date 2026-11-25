@@ -4,8 +4,9 @@ import { History, Plus, RotateCcw, Save, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
 import { ApiError, api } from "@/lib/api-client";
-import { tierLabels, tr } from "@/lib/catalog";
+import { sleeveLabels, tierLabels, tr } from "@/lib/catalog";
 import type { PriceSheet } from "@/lib/catalog/price-sheet";
+import { sleevesOf } from "@/lib/catalog/size-charts";
 import type { Catalog, SizeTier, Sleeve } from "@/lib/catalog/types";
 import type { CatalogVersion } from "@/server/catalog-store";
 import { Panel, primaryButton, smallButton, when } from "./ui";
@@ -13,25 +14,43 @@ import { Panel, primaryButton, smallButton, when } from "./ui";
 const TIERS: SizeTier[] = ["S", "M", "L", "AO"];
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
-/** A whole-number box that only reports valid values, and shows red while the text isn't one. */
-function Num({ value, onChange, label, min = 0, max = 1_000_000, className = "w-24" }: { value: number; onChange: (n: number) => void; label: string; min?: number; max?: number; className?: string }) {
+/** A number box (whole numbers, or with one decimal) that only reports valid values, and shows red while the text isn't one. */
+function Num({
+  value,
+  onChange,
+  label,
+  min = 0,
+  max = 1_000_000,
+  className = "w-24",
+  decimal = false,
+}: {
+  value: number;
+  onChange: (n: number) => void;
+  label: string;
+  min?: number;
+  max?: number;
+  className?: string;
+  decimal?: boolean;
+}) {
   const [text, setText] = useState(String(value));
   useEffect(() => {
     setText((t) => (Number(t) === value && t.trim() !== "" ? t : String(value)));
   }, [value]);
-  const n = Number(text);
-  const ok = text.trim() !== "" && Number.isInteger(n) && n >= min && n <= max;
+  const valid = (t: string) => {
+    const v = Number(t);
+    return (decimal ? /^\d+(\.\d)?$/.test(t.trim()) : t.trim() !== "" && Number.isInteger(v)) && v >= min && v <= max;
+  };
+  const ok = valid(text);
   return (
     <input
       value={text}
-      inputMode="numeric"
+      inputMode={decimal ? "decimal" : "numeric"}
       aria-label={label}
       aria-invalid={!ok}
       onChange={(e) => {
         const t = e.target.value;
         setText(t);
-        const v = Number(t);
-        if (t.trim() !== "" && Number.isInteger(v) && v >= min && v <= max) onChange(v);
+        if (valid(t)) onChange(Number(t));
       }}
       className={`${className} rounded-md border bg-ink px-2 py-1.5 text-right text-sm text-cream focus:border-gold focus:outline-none ${ok ? "border-line" : "border-arcane-bright"}`}
     />
@@ -70,6 +89,7 @@ export function PriceEditor({ catalog, sheet, versions }: { catalog: Catalog; sh
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
   const [holiday, setHoliday] = useState({ date: "", yearly: false });
+  const [chartIndex, setChartIndex] = useState(0);
   // After a save or restore the page sends the prices now in use; start again from them.
   useEffect(() => setDraft(sheet), [sheet]);
   const dirty = JSON.stringify(draft) !== JSON.stringify(sheet);
@@ -129,9 +149,9 @@ export function PriceEditor({ catalog, sheet, versions }: { catalog: Catalog; sh
   return (
     <div data-price-editor className="space-y-6 pb-24">
       <div>
-        <h1 className="font-display text-4xl tracking-wide uppercase">Prices</h1>
+        <h1 className="font-display text-4xl tracking-wide uppercase">Prices &amp; sizes</h1>
         <p className="mt-1 max-w-3xl text-sm text-cream-muted">
-          Everything here is in Egyptian pounds and applies to new orders as soon as you save. Orders already placed keep the prices they were charged. Every save is kept, so you can go back.
+          Prices are in Egyptian pounds and the size chart in centimetres. Changes apply as soon as you save; orders already placed keep the prices they were charged. Every save is kept, so you can go back.
         </p>
       </div>
 
@@ -359,6 +379,8 @@ export function PriceEditor({ catalog, sheet, versions }: { catalog: Catalog; sh
         </Panel>
       </div>
 
+      <SizeChartPanel catalog={catalog} draft={draft} edit={edit} chartIndex={chartIndex} setChartIndex={setChartIndex} />
+
       <Panel title="Colors in stock">
         <ul className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-6">
           {draft.colors.map((c, i) => {
@@ -438,5 +460,91 @@ export function PriceEditor({ catalog, sheet, versions }: { catalog: Catalog; sh
         </div>
       </div>
     </div>
+  );
+}
+
+/** The size chart customers see: each garment's measurements in each fit, in cm. */
+function SizeChartPanel({
+  catalog,
+  draft,
+  edit,
+  chartIndex,
+  setChartIndex,
+}: {
+  catalog: Catalog;
+  draft: PriceSheet;
+  edit: (fn: (s: PriceSheet) => void) => void;
+  chartIndex: number;
+  setChartIndex: (i: number) => void;
+}) {
+  const charts = draft.sizeCharts ?? [];
+  const ci = Math.min(chartIndex, Math.max(0, charts.length - 1));
+  const chart = charts[ci];
+  const product = chart ? catalog.products.find((p) => p.id === chart.productId) : undefined;
+  const sleeves = product ? sleevesOf(product) : [];
+  const chartName = (c: { productId: string; fitId: string }) =>
+    `${tr(catalog.products.find((p) => p.id === c.productId)?.name ?? { en: c.productId, ar: c.productId }, "en")} · ${tr(catalog.fits.find((f) => f.id === c.fitId)?.name ?? { en: c.fitId, ar: c.fitId }, "en")}`;
+  const sizeLabel = (id: string) => catalog.sizes.find((s) => s.id === id)?.label ?? id;
+
+  return (
+    <Panel title="Size chart (cm, garment laid flat)">
+      <p className="mb-4 max-w-3xl text-sm text-cream-muted">
+        Customers see this on the size chart page, in the designer and when joining a group order. Chest: armpit to armpit. Length: from the top of the shoulder,
+        next to the collar, to the hem. Sleeve: from the shoulder seam to the end of the sleeve. These start as typical measurements; replace them with your
+        garments&apos; real ones. Halves like 52.5 are fine.
+      </p>
+      {charts.length ? (
+        <>
+          <div className="mb-4 flex flex-wrap gap-2" role="group" aria-label="Garment and fit">
+            {charts.map((c, i) => (
+              <button
+                key={`${c.productId}-${c.fitId}`}
+                type="button"
+                aria-pressed={i === ci}
+                onClick={() => setChartIndex(i)}
+                className="rounded-full border border-line px-3 py-1.5 text-sm text-cream-muted transition-colors hover:border-gold/60 aria-pressed:border-gold aria-pressed:bg-gold aria-pressed:text-ink"
+              >
+                {chartName(c)}
+              </button>
+            ))}
+          </div>
+          {chart ? (
+            <Table head={["Size", "Chest", "Length", ...sleeves.map((sl) => tr(sleeveLabels[sl], "en"))]}>
+              {chart.rows.map((row, ri) => (
+                <tr key={row.sizeId}>
+                  <td className="py-1.5 text-cream">{sizeLabel(row.sizeId)}</td>
+                  <td className={cellNum}>
+                    <Num decimal min={5} max={250} value={row.chest} onChange={(n) => edit((s) => void (s.sizeCharts![ci]!.rows[ri]!.chest = n))} label={`${chartName(chart)} ${sizeLabel(row.sizeId)} chest`} />
+                  </td>
+                  <td className={cellNum}>
+                    <Num decimal min={5} max={250} value={row.length} onChange={(n) => edit((s) => void (s.sizeCharts![ci]!.rows[ri]!.length = n))} label={`${chartName(chart)} ${sizeLabel(row.sizeId)} length`} />
+                  </td>
+                  {sleeves.map((sl) =>
+                    row.sleeve[sl] !== undefined ? (
+                      <td key={sl} className={cellNum}>
+                        <Num
+                          decimal
+                          min={5}
+                          max={250}
+                          value={row.sleeve[sl]!}
+                          onChange={(n) => edit((s) => void (s.sizeCharts![ci]!.rows[ri]!.sleeve[sl] = n))}
+                          label={`${chartName(chart)} ${sizeLabel(row.sizeId)} ${sl} sleeve`}
+                        />
+                      </td>
+                    ) : (
+                      <td key={sl} className={`${cellNum} text-cream-muted`}>
+                        –
+                      </td>
+                    ),
+                  )}
+                </tr>
+              ))}
+            </Table>
+          ) : null}
+        </>
+      ) : (
+        <p className="text-sm text-cream-muted">No size chart yet.</p>
+      )}
+    </Panel>
   );
 }

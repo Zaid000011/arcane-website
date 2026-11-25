@@ -11,7 +11,7 @@ export function AdminNav({ user, newRequests = 0 }: { user: AdminUser; newReques
   const links = [
     { href: "/admin/orders", label: "Orders", show: true },
     { href: "/admin/requests", label: "Requests", show: can(user.role, "requests.manage"), badge: newRequests },
-    { href: "/admin/prices", label: "Prices", show: can(user.role, "prices.edit") },
+    { href: "/admin/prices", label: "Prices & sizes", show: can(user.role, "prices.edit") },
     { href: "/admin/team", label: "Team", show: can(user.role, "team.manage") },
     { href: "/admin/account", label: "My account", show: true },
   ].filter((l) => l.show) as { href: string; label: string; badge?: number }[];

@@ -10,6 +10,7 @@ import { addWorkingDays, formatDate } from "@/lib/order/dates";
 import { effectiveSizes, needsRoster, parseRosterText, totalPieces } from "@/lib/order/roster";
 import type { OrderDraft, RosterEntry } from "@/lib/order/types";
 import type { Quote } from "@/lib/pricing/types";
+import { SizeChartButton } from "@/components/size/SizeChart";
 import { useI18n } from "@/i18n/client";
 import { fmt, formatMoney } from "@/i18n/format";
 import { FieldLabel } from "./controls";
@@ -37,7 +38,8 @@ export function SizesPanel({ catalog, design, quote, onSendSize }: Omit<PanelPro
     <div className="space-y-8">
       <section>
         <FieldLabel hint={fmt(t.piecesTotal, { count: pieces })}>{t.sizesTitle}</FieldLabel>
-        <p className="mb-4 text-sm text-cream-muted">{roster ? t.rosterIntro : t.sizesIntro}</p>
+        <p className="mb-3 text-sm text-cream-muted">{roster ? t.rosterIntro : t.sizesIntro}</p>
+        <SizeChartButton catalog={catalog} productId={design.productId} fitId={design.fitId} sleeve={design.sleeve} onSendSize={onSendSize} className="mb-4" />
         {roster ? (
           <RosterEditor catalog={catalog} order={order} setOrder={setOrder} showName={design.personalization.names} showNumber={design.personalization.numbers} />
         ) : (

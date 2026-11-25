@@ -1,4 +1,4 @@
-import { ArrowRight, ChevronDown, GraduationCap, Shirt, Upload, Users } from "lucide-react";
+import { ArrowRight, ChevronDown, GraduationCap, Ruler, Shirt, Upload, Users } from "lucide-react";
 import Link from "next/link";
 import { Fragment } from "react";
 import { Seal } from "@/components/brand/Seal";
@@ -170,6 +170,12 @@ export default async function HomePage() {
                 </div>
               </Link>
             ))}
+          </div>
+          <div className="mt-8 text-center">
+            <Link href="/size-chart" className="inline-flex items-center gap-2 text-sm font-semibold text-gold hover:text-gold-light">
+              <Ruler className="h-4 w-4" aria-hidden /> {dict.nav.sizeChart}
+              <ArrowRight className="h-4 w-4 rtl:rotate-180" aria-hidden />
+            </Link>
           </div>
         </div>
       </section>

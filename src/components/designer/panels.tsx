@@ -3,6 +3,7 @@
 import { BookOpen, Check, ChevronRight, Minus, Palette, Plus, Search, X, type LucideIcon } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 import { isLightHex } from "@/components/garment/color";
+import { SizeChartButton } from "@/components/size/SizeChart";
 import { GarmentImage } from "@/components/three/GarmentImage";
 import { sleeveLabels, startingPrice, tierHints, tierLabels, tr } from "@/lib/catalog";
 import type { Catalog, Product } from "@/lib/catalog/types";
@@ -25,7 +26,7 @@ export interface PanelProps {
 
 /* ---------- Garment ---------- */
 
-export function GarmentPanel({ catalog, design, product, update }: PanelProps) {
+export function GarmentPanel({ catalog, design, product, update, onSendSize }: PanelProps & { onSendSize?: () => void }) {
   const { locale, dict } = useI18n();
   const t = dict.designer;
   const sleeves = (["short", "long"] as const).filter((s) => product.basePrice[s] !== undefined);
@@ -82,6 +83,8 @@ export function GarmentPanel({ catalog, design, product, update }: PanelProps) {
           </div>
         </section>
       ) : null}
+
+      <SizeChartButton catalog={catalog} productId={product.id} fitId={design.fitId} sleeve={design.sleeve} onSendSize={onSendSize} />
     </div>
   );
 }
@@ -292,7 +295,7 @@ export function PrintsPanel({
             const price = method?.prices[p.tier];
             const isCurrent = current?.id === p.id;
             return (
-              <li key={p.id} id={`print-${p.id}`} className={`rounded-xl border p-3 transition-colors ${isCurrent ? "border-gold/60 bg-gold/5" : "border-line"}`}>
+              <li key={p.id} id={`print-${p.id}`} className={`scroll-mt-[calc(var(--designer-viewer-h,0px)_+_4.5rem)] rounded-xl border p-3 transition-colors ${isCurrent ? "border-gold/60 bg-gold/5" : "border-line"}`}>
                 <div className="flex items-center justify-between gap-3">
                   <button type="button" className="min-w-0 flex-1 text-start" onClick={() => onFocusPrint(p.id)} aria-pressed={isCurrent}>
                     <span className="block font-semibold text-cream">

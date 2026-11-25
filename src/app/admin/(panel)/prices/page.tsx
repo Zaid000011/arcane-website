@@ -5,7 +5,7 @@ import { catalogVersions, getLiveCatalog } from "@/server/catalog-store";
 import { requirePageUser } from "@/server/team-http";
 
 export const dynamic = "force-dynamic";
-export const metadata: Metadata = { title: "Prices" };
+export const metadata: Metadata = { title: "Prices & sizes" };
 
 export default async function PricesPage() {
   await requirePageUser("prices.edit");

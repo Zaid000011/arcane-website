@@ -4,6 +4,7 @@ import { Camera, CalendarClock, Check, Copy, Minus, Plus, Rotate3d, Ruler, Share
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Star } from "@/components/brand/Star";
 import { canShowPhoto, GarmentView, useViewMode, ViewModeToggle } from "@/components/garment/GarmentView";
+import { SizeChartButton } from "@/components/size/SizeChart";
 import type { Catalog } from "@/lib/catalog/types";
 import { areaSide } from "@/lib/design/areas";
 import type { StageView } from "@/lib/three/stage";
@@ -250,6 +251,7 @@ export function GroupJoin({ group, catalog }: { group: PublicGroup; catalog: Cat
                     </button>
                   ))}
                 </div>
+                <SizeChartButton catalog={catalog} productId={group.design.productId} fitId={group.design.fitId} sleeve={group.design.sleeve} fixed className="mt-3" />
               </Field>
               <a
                 href={`/send?type=size&product=${encodeURIComponent(group.design.productId)}`}

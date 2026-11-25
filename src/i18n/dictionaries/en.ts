@@ -4,11 +4,13 @@ export const en = {
     description:
       "Design custom hoodies, t-shirts and jackets for graduating classes, school uniforms and club merch in Egypt. Pick every color, print and detail, then collect your group's sizes and names with one link.",
     pricingTitle: "Pricing",
+    sizeChartTitle: "Size chart",
   },
 
   nav: {
     design: "Design",
     pricing: "Pricing",
+    sizeChart: "Size chart",
     howItWorks: "How it works",
     printMethods: "Print methods",
     faq: "FAQ",
@@ -848,6 +850,37 @@ export const en = {
       network: "Couldn't reach Arcane. Check your connection and try again.",
       server: "Something went wrong on our side. Try again in a minute.",
     },
+  },
+
+  sizeChart: {
+    title: "Size chart",
+    open: "Size chart",
+    titleFor: "{product} size chart",
+    pageIntro: "Every garment's measurements, size by size, taken with the garment laid flat. Compare them with a top that already fits you well.",
+    fit: "Fit",
+    sleeve: "Sleeve",
+    size: "Size",
+    chest: "Chest",
+    length: "Length",
+    sleeveLength: "Sleeve",
+    chestHelp: "Armpit to armpit",
+    lengthHelp: "Top of the shoulder to the hem",
+    sleeveHelp: "Shoulder seam to the end of the sleeve",
+    units: "Units",
+    cm: "cm",
+    inches: "in",
+    howTitle: "How to measure",
+    howSteps: [
+      "Lay a top that fits you well flat on a table and smooth it out.",
+      "Measure it the way the drawing shows.",
+      "Pick the size with the closest numbers. Between two sizes? Take the bigger one for a looser fit.",
+    ],
+    drawingLabel: "A top laid flat. A is the chest, from armpit to armpit. B is the length, from the top of the shoulder to the hem. C is the sleeve, from the shoulder seam to its end.",
+    tolerance: "Measurements can differ by 1 to 2 cm from piece to piece.",
+    otherSize: "Need a size that isn't here, or made to your own measurements?",
+    otherSizeCta: "Send it to us",
+    noChart: "There's no size chart for this garment yet. Ask us on WhatsApp.",
+    close: "Close",
   },
 
   footer: {

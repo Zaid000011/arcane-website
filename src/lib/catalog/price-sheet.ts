@@ -1,4 +1,5 @@
-import type { Catalog, PaymentPolicy, PersonalizationPricing, Sleeve, SizeTier } from "./types";
+import { roundCm } from "./size-charts";
+import type { Catalog, PaymentPolicy, PersonalizationPricing, SizeChart, Sleeve, SizeTier } from "./types";
 
 /**
  * The parts of the catalog the owner edits in the price editor. Saved
@@ -18,6 +19,8 @@ export interface PriceSheet {
   payments: PaymentPolicy;
   /** "MM-DD" every year, or "YYYY-MM-DD" for one date. */
   holidays: string[];
+  /** Garment measurements in cm. Versions saved before the size chart existed don't have it. */
+  sizeCharts?: SizeChart[];
 }
 
 export function priceSheetOf(c: Catalog): PriceSheet {
@@ -39,6 +42,7 @@ export function priceSheetOf(c: Catalog): PriceSheet {
     pickup: c.pickup,
     payments: c.payments,
     holidays: c.calendar.holidays,
+    sizeCharts: c.sizeCharts,
   });
 }
 
@@ -103,6 +107,21 @@ export function applyPriceSheet(base: Catalog, sheet: PriceSheet): Catalog {
   c.pickup = { ...sheet.pickup };
   c.payments = { ...sheet.payments };
   c.calendar = { ...c.calendar, holidays: [...new Set(sheet.holidays)].sort() };
+  // Only measurements the built-in chart has can change: a garment, fit, size or sleeve it doesn't know is ignored.
+  for (const sc of sheet.sizeCharts ?? []) {
+    const chart = c.sizeCharts.find((x) => x.productId === sc.productId && x.fitId === sc.fitId);
+    if (!chart) continue;
+    for (const r of sc.rows) {
+      const row = chart.rows.find((x) => x.sizeId === r.sizeId);
+      if (!row) continue;
+      row.chest = roundCm(r.chest);
+      row.length = roundCm(r.length);
+      for (const sl of Object.keys(row.sleeve) as Sleeve[]) {
+        const v = r.sleeve[sl];
+        if (v !== undefined) row.sleeve[sl] = roundCm(v);
+      }
+    }
+  }
   return c;
 }
 

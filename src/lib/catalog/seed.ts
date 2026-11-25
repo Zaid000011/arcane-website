@@ -1,3 +1,4 @@
+import { startingSizeCharts } from "./size-charts";
 import type { Catalog, FabricOption, GsmOption } from "./types";
 
 /**
@@ -85,7 +86,7 @@ const fleeceFabrics: FabricOption[] = [
 const allFits = ["regular", "oversized", "boxy"];
 const topAreas = ["frontCenter", "leftChest", "rightChest", "fullFront", "backUpper", "fullBack", "leftSleeve", "rightSleeve", "backNeck"];
 
-export const seedCatalog: Catalog = {
+const baseCatalog: Omit<Catalog, "sizeCharts"> = {
   version: 1,
   currency: "EGP",
 
@@ -497,4 +498,10 @@ export const seedCatalog: Catalog = {
     // Fixed national holidays. Eid and other moving holidays are added per year from the admin panel.
     holidays: ["01-07", "01-25", "04-25", "05-01", "06-30", "07-23", "10-06"],
   },
+};
+
+export const seedCatalog: Catalog = {
+  ...baseCatalog,
+  // Typical measurements to start from; the owner sets the real ones in Admin → Prices.
+  sizeCharts: startingSizeCharts(baseCatalog.products, baseCatalog.fits, baseCatalog.sizes),
 };

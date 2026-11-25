@@ -31,6 +31,7 @@ export function Footer({ dict }: { dict: Dictionary; locale: Locale }) {
             <li><Link className="text-cream-muted hover:text-gold" href="/#how">{dict.nav.howItWorks}</Link></li>
             <li><Link className="text-cream-muted hover:text-gold" href="/#methods">{dict.nav.printMethods}</Link></li>
             <li><Link className="text-cream-muted hover:text-gold" href="/#faq">{dict.nav.faq}</Link></li>
+            <li><Link className="text-cream-muted hover:text-gold" href="/size-chart">{dict.nav.sizeChart}</Link></li>
           </ul>
         </div>
 

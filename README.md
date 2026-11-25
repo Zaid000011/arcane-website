@@ -22,7 +22,7 @@ Open `/admin` (for example http://localhost:3000/admin).
 - **Orders:** the order list shows what needs doing. On each order you check payment screenshots, confirm payments, send proofs, move it through production, write team notes, and message the customer on WhatsApp. If a customer loses their link, you can make a new one there.
 - **Requests:** designs, colors and custom sizes customers sent with the "send it to us" buttons (on the home page, in the designer, on the pricing page and at `/send`). Each one shows the customer's WhatsApp, their files, the color code with the closest color you stock, or their measurements. Reply on WhatsApp, then mark it contacted or done. The menu shows how many are new.
 - **Workshop sheet:** printable from each order, with garment, colors, each print's position and size, a to-scale drawing, size totals and names list.
-- **Prices:** changes apply to new orders as soon as you save. Every save is kept as a version you can bring back.
+- **Prices & sizes:** prices, plus the size chart customers see (each garment's measurements in each fit, in cm). Changes apply as soon as you save, and every save is kept as a version you can bring back. The size chart starts with typical measurements: replace them with your garments' real ones.
 - **Lost owner password:** another owner can set a new one under Team. If there's no other owner, the login has to be reset in the database.
 
 ## Share a temporary link
@@ -50,11 +50,12 @@ To update it after changing the site, or prices in the admin panel, run `npm run
 
 | What | File |
 |---|---|
-| Prices, fees, shipping, deposit %, cash on delivery limit, holidays, colors in stock, products on sale, a fee for a size (none by default) | Admin panel → Prices |
+| Prices, fees, shipping, deposit %, cash on delivery limit, holidays, colors in stock, products on sale, a fee for a size (none by default) | Admin panel → Prices & sizes |
+| The size chart's measurements (chest, length, sleeve for every size, garment and fit) | Admin panel → Prices & sizes. The starting values are in `src/lib/catalog/size-charts.ts` |
 | Product names, options, colors, print areas, and the original prices | `src/lib/catalog/seed.ts`. Saved prices from the admin panel are laid over it by id |
 | What each fabric type and fabric weight says to customers | `description` of each fabric and GSM option in `src/lib/catalog/seed.ts` |
 | How fabrics and print methods look in the close-ups (magnifying glass, print callout, "Print types explained") | `src/lib/closeup/surface.ts` |
-| Weekend days (delivery dates) | `calendar.weekend` in `src/lib/catalog/seed.ts`. Holidays and Eid dates: Admin panel → Prices |
+| Weekend days (delivery dates) | `calendar.weekend` in `src/lib/catalog/seed.ts`. Holidays and Eid dates: Admin panel → Prices & sizes |
 | Instagram, WhatsApp number, pickup location | `src/config/site.ts` (empty values stay hidden) |
 | Where customers send the deposit (InstaPay address, wallet number, account name) | `payment` in `src/config/site.ts`. While empty, the order page says you'll send the details on WhatsApp |
 | English and Arabic text | `src/i18n/dictionaries/en.ts`, `src/i18n/dictionaries/ar.ts` |
@@ -76,6 +77,8 @@ To update it after changing the site, or prices in the admin panel, run `npm run
 - The design in progress is saved in the browser, so it survives a refresh. Uploaded images are kept in the browser's IndexedDB (`src/lib/design/assets.ts`) until checkout uploads them
 - Artwork is stored in millimetres inside each print box (`src/lib/design/geometry.ts`), so print files can be produced at real size later
 - Prints go anywhere (`src/lib/design/sides.ts`). Each garment has sides (front, back, both sleeves, and the hood on hoodies), each with a printable panel. A side can hold up to 6 prints, and each print's artwork can be dragged and resized anywhere on its panel, in an editor drawn on the garment's own photo. A print's size sets its price: up to 10 × 10 cm Small, up to A4 Medium, up to A3 Large, bigger All-over (only print types priced that big). The size comes from the artwork itself, worked out the same way in the browser and on the server, so the price can't be changed in the browser. Text is sized from each font's measured letter width. Designs saved before this (prints tied to fixed areas like "left chest") are converted on loading, with the artwork kept where it was; placed orders show exactly as ordered.
+- On phones the garment stays pinned under the header on every designer step (on computers it stays beside the steps), so customers always see what they're changing. Its height is shared as the CSS variable `--designer-viewer-h`, so the step panel and prints scroll into view below it.
+- Size chart (`src/lib/catalog/size-charts.ts`, `src/components/size/SizeChart.tsx`): every garment's chest, length and sleeve in cm or inches for each size and fit, with a "how to measure" drawing. It's on its own page (`/size-chart`, in the menu and footer), behind a "Size chart" button on the designer's Garment and Sizes steps, and on the group order page where members pick their size (showing just the fit and sleeve the organizer chose). The measurements are saved with the prices, so older saved price versions simply keep the starting chart.
 - The designer opens on real garment photos (`src/lib/mockup/`), with a Photo | 3D switch:
   - Each garment and sleeve length has a front and a back photo of a white garment (made with AI image generation, hood raised on hoodie backs so names on the upper back show).
   - The browser turns each photo into a map of light and shadow and lays the chosen color under it, so folds, seams and knit texture stay as photographed. Dark colors get deeper folds and a soft sheen, like black cotton in a real product photo.
@@ -117,4 +120,5 @@ To update it after changing the site, or prices in the admin panel, run `npm run
 | — Real garment photos: every garment in every color as a product photo, with each print method's finish; 3D stays one tap away | Done |
 | — Prints anywhere: several per side, dragged and resized freely, priced by size; real print-type photos; real 3D models of the garments | Done (the zip hoodie has no 3D model yet) |
 | — Customer help: "send it to us" for own designs, colors and custom sizes; fabric magnifying glass; print close-ups; "Print types explained"; HEX color codes; plain-words fabric weights; no extra fee for 2XL and 3XL | Done |
+| — Size chart (page, designer, group orders; edited in Admin → Prices & sizes) and the garment pinned on screen through every designer step on phones | Done (the measurements are typical ones until the owner enters the real garments') |
 | 9. Polish, end-to-end tests, deployment | |

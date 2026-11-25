@@ -127,6 +127,24 @@ export interface Size {
   surcharge: number;
 }
 
+/** One size's garment measurements in cm, taken with the garment laid flat. */
+export interface SizeMeasurements {
+  sizeId: string;
+  /** Across the chest, from armpit to armpit. */
+  chest: number;
+  /** From the top of the shoulder, next to the collar, down to the hem. */
+  length: number;
+  /** From the shoulder seam to the end of the sleeve, for each sleeve length the garment comes in. */
+  sleeve: Partial<Record<Sleeve, number>>;
+}
+
+/** The measurements of one garment in one fit, size by size. */
+export interface SizeChart {
+  productId: string;
+  fitId: string;
+  rows: SizeMeasurements[];
+}
+
 export interface DeliverySpeed {
   id: string;
   name: LocalizedText;
@@ -169,6 +187,8 @@ export interface Catalog {
   printMethods: PrintMethod[];
   personalization: PersonalizationPricing;
   sizes: Size[];
+  /** Garment measurements for each product and fit, shown to customers as the size chart. */
+  sizeCharts: SizeChart[];
   deliverySpeeds: DeliverySpeed[];
   governorates: Governorate[];
   shippingZones: ShippingZone[];

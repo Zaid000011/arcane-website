@@ -19,6 +19,7 @@ export function Header() {
   const links = [
     { href: "/design", label: dict.nav.design },
     { href: "/pricing", label: dict.nav.pricing },
+    { href: "/size-chart", label: dict.nav.sizeChart },
     { href: "/#how", label: dict.nav.howItWorks },
     { href: "/#methods", label: dict.nav.printMethods },
     { href: "/#faq", label: dict.nav.faq },

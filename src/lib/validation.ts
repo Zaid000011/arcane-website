@@ -177,6 +177,8 @@ export const adminNoteSchema = z.object({ text: z.string().max(2000) });
 
 const money = z.number().int().min(0).max(1_000_000);
 const delta = z.number().int().min(-100_000).max(100_000);
+/** A garment measurement for the size chart, in cm. */
+const garmentCm = z.number().finite().min(5).max(250);
 
 export const priceSheetSchema = z.object({
   products: z
@@ -215,6 +217,18 @@ export const priceSheetSchema = z.object({
   pickup: z.object({ enabled: z.boolean(), fee: money }),
   payments: z.object({ depositPercent: z.number().int().min(0).max(100), codFullMaxTotal: money }),
   holidays: z.array(z.string().regex(/^(\d{4}-)?\d{2}-\d{2}$/)).max(200),
+  sizeCharts: z
+    .array(
+      z.object({
+        productId: id,
+        fitId: id,
+        rows: z
+          .array(z.object({ sizeId: id, chest: garmentCm, length: garmentCm, sleeve: z.object({ short: garmentCm.optional(), long: garmentCm.optional() }) }))
+          .max(20),
+      }),
+    )
+    .max(100)
+    .optional(),
 });
 
 export const restoreSchema = z.object({ id: z.union([z.number().int().positive(), z.literal("original")]) });

@@ -2,7 +2,7 @@
 
 import { ArrowLeft, ArrowRight, RotateCcw, Upload } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ensureCartLoaded, useCartStore } from "@/lib/cart/store";
 import type { Catalog } from "@/lib/catalog/types";
 import { designIssues } from "@/lib/design/checks";
@@ -53,6 +53,25 @@ export function Designer({ catalog, initialProductId }: { catalog: Catalog; init
   const design = stored ?? fallback;
   const [sendKind, setSendKind] = useState<RequestKind | null>(null);
   const [explainPrints, setExplainPrints] = useState(false);
+  const viewerRef = useRef<HTMLDivElement>(null);
+
+  // On phones the garment stays pinned under the header on every step. Its height is shared as
+  // --designer-viewer-h, so anything scrolled to (the step panel, a print) lands below it, not behind it.
+  useEffect(() => {
+    const el = viewerRef.current;
+    if (!el) return;
+    const wide = window.matchMedia("(min-width: 1024px)");
+    const apply = () => document.documentElement.style.setProperty("--designer-viewer-h", wide.matches ? "0px" : `${el.offsetHeight}px`);
+    apply();
+    const observer = new ResizeObserver(apply);
+    observer.observe(el);
+    wide.addEventListener("change", apply);
+    return () => {
+      observer.disconnect();
+      wide.removeEventListener("change", apply);
+      document.documentElement.style.removeProperty("--designer-viewer-h");
+    };
+  }, []);
 
   // Load the design saved on this device after the first render (avoids a server/client mismatch).
   useEffect(() => {
@@ -202,14 +221,18 @@ export function Designer({ catalog, initialProductId }: { catalog: Catalog; init
       </div>
 
       <div className="grid gap-8 lg:grid-cols-[minmax(0,1.05fr)_minmax(0,1fr)]">
-        <div className={editing ? "sticky top-16 z-30 -mx-4 bg-ink/95 px-4 pb-2 backdrop-blur sm:-mx-6 sm:px-6 lg:top-20 lg:mx-0 lg:self-start lg:bg-transparent lg:px-0 lg:pb-0 lg:backdrop-blur-none" : "lg:sticky lg:top-20 lg:self-start"}>
-          <ViewerCard catalog={catalog} design={design} placeholders={editing} compact={editing} closeUp={closeUp} />
+        {/* Pinned on every step, so the garment stays in sight while every choice is made. */}
+        <div
+          ref={viewerRef}
+          className="sticky top-16 z-30 -mx-4 bg-ink/95 px-4 pb-2 backdrop-blur sm:-mx-6 sm:px-6 lg:top-20 lg:mx-0 lg:self-start lg:bg-transparent lg:px-0 lg:pb-0 lg:backdrop-blur-none"
+        >
+          <ViewerCard catalog={catalog} design={design} placeholders={editing} compact closeUp={closeUp} />
           <div className="mt-4 hidden lg:block">
             <PriceSummary quote={quote} catalog={catalog} extraIssues={extraIssues} />
           </div>
         </div>
 
-        <div id="designer-panel" className="min-w-0 scroll-mt-20">
+        <div id="designer-panel" className="min-w-0 scroll-mt-[calc(var(--designer-viewer-h,0px)_+_4.5rem)]">
           <nav aria-label={t.title} className="mb-6">
             <ol className="-mx-1 flex snap-x gap-1.5 overflow-x-auto rounded-full border border-line bg-ink-2/70 p-1.5 [scrollbar-width:none]">
               {DESIGNER_STEPS.map((s, i) => (
@@ -229,7 +252,7 @@ export function Designer({ catalog, initialProductId }: { catalog: Catalog; init
             <p className="mt-2 text-center text-xs text-cream-muted">{fmt(t.stepOf, { n: stepIndex + 1, total: DESIGNER_STEPS.length })}</p>
           </nav>
 
-          {step === "garment" && <GarmentPanel {...panelProps} />}
+          {step === "garment" && <GarmentPanel {...panelProps} onSendSize={() => setSendKind("size")} />}
           {step === "fabric" && <FabricPanel {...panelProps} />}
           {step === "colors" && <ColorsPanel {...panelProps} onSendColor={() => setSendKind("color")} />}
           {step === "prints" && <PrintsPanel {...panelProps} onFocusPrint={focusPrint} onExplainPrints={() => setExplainPrints(true)} />}
