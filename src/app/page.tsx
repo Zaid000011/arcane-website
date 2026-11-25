@@ -88,7 +88,8 @@ export default async function HomePage() {
 
           <div className="relative mx-auto w-full max-w-md animate-glide-in" style={{ animationDelay: "150ms" }}>
             <div className="absolute inset-[-12%] rounded-full bg-gold/10 blur-3xl" aria-hidden />
-            <svg viewBox="0 0 100 100" className="absolute inset-[-8%] animate-spin-slow text-gold/40" aria-hidden>
+            {/* Sized explicitly: Safari doesn't stretch an SVG to fill its insets, which left the ring off-center on iPhones. */}
+            <svg viewBox="0 0 100 100" className="absolute top-[-8%] left-[-8%] h-[116%] w-[116%] animate-spin-slow text-gold/40" aria-hidden>
               <circle cx="50" cy="50" r="49" fill="none" stroke="currentColor" strokeWidth="0.3" strokeDasharray="1 2.2" />
             </svg>
             {[
@@ -150,13 +151,14 @@ export default async function HomePage() {
                 href={`/design?product=${product.id}`}
                 className="card group flex flex-col overflow-hidden transition-colors hover:border-gold/60"
               >
-                <div className="relative flex aspect-square items-center justify-center bg-[radial-gradient(circle_at_50%_40%,rgba(201,162,39,0.12),transparent_65%)] p-4">
+                {/* The picture is placed with explicit sizes: as a stretched flex item, Safari drew it card-wide and off to the right on iPhones. */}
+                <div className="relative aspect-square bg-[radial-gradient(circle_at_50%_40%,rgba(201,162,39,0.12),transparent_65%)]">
                   <ProductThumb
                     catalog={catalog}
                     productId={product.id}
                     colorId={productColors[product.id] ?? "black"}
                     alt={tr(product.name, locale)}
-                    className="h-full w-full object-contain transition-transform duration-500 group-hover:scale-[1.04]"
+                    className="absolute inset-4 h-[calc(100%_-_2rem)] w-[calc(100%_-_2rem)] object-contain transition-transform duration-500 group-hover:scale-[1.04]"
                   />
                 </div>
                 <div className="flex flex-1 flex-col gap-1 border-t border-line p-4 sm:p-5">

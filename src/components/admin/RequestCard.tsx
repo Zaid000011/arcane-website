@@ -144,9 +144,9 @@ export function RequestCard({ request: r, productName, closest }: Props) {
           {r.files.map((f) => (
             <li key={f.id} className="overflow-hidden rounded-xl border border-line bg-ink/60">
               {PREVIEW.includes(f.type) ? (
-                <a href={`${base}/files/${f.id}`} target="_blank" rel="noopener noreferrer" className="block aspect-square bg-[repeating-conic-gradient(#2a1416_0%_25%,#1c0e10_0%_50%)] bg-[length:16px_16px]">
+                <a href={`${base}/files/${f.id}`} target="_blank" rel="noopener noreferrer" className="relative block aspect-square bg-[repeating-conic-gradient(#2a1416_0%_25%,#1c0e10_0%_50%)] bg-[length:16px_16px]">
                   {/* eslint-disable-next-line @next/next/no-img-element -- private file behind the team login */}
-                  <img src={`${base}/files/${f.id}`} alt={f.name} className="h-full w-full object-contain" loading="lazy" />
+                  <img src={`${base}/files/${f.id}`} alt={f.name} className="absolute inset-0 h-full w-full object-contain" loading="lazy" />
                 </a>
               ) : (
                 <span className="flex aspect-square flex-col items-center justify-center gap-1 text-cream-muted">
