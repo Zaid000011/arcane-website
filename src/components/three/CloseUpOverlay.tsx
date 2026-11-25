@@ -8,7 +8,7 @@ import type { Catalog, FabricOption } from "@/lib/catalog/types";
 import { artFrom, closeUpFabric, closeUpSize, fitArt, sampleArt, useCloseUp } from "@/lib/closeup/client";
 import { hasDistinctInside } from "@/lib/closeup/surface";
 import { useMeasureStore } from "@/lib/design/measure-store";
-import { isPrintSide, panelBox, printRenderRect } from "@/lib/design/sides";
+import { isPrintSide, panelBox, printRenderRect, renderPad } from "@/lib/design/sides";
 import type { DesignSelection, PrintSelection } from "@/lib/pricing/types";
 import { printPhotoUrl } from "@/lib/print-photos";
 import { useI18n } from "@/i18n/client";
@@ -158,7 +158,7 @@ function PrintCallout({
     if (own && product && isPrintSide(print.areaId)) {
       const { drawPrintRect } = await import("@/lib/three/print-canvas");
       const patch = PATCHES[print.methodId] ?? null;
-      const rect = printRenderRect(elements, panelBox(product.mockup, design.sleeve, print.areaId), useMeasureStore.getState().measurements, patch ? 6 : 2);
+      const rect = printRenderRect(elements, panelBox(product.mockup, design.sleeve, print.areaId), useMeasureStore.getState().measurements, renderPad(Boolean(patch)));
       const full = await drawPrintRect(elements, rect, patch);
       // The whole design, so what's written can be read, in this print type's finish.
       const fitted = fitArt(full, rect.w, rect.h, size);

@@ -3,7 +3,7 @@ import type { Catalog } from "@/lib/catalog/types";
 import { withFreePrints } from "@/lib/design/logic";
 import { useMeasureStore } from "@/lib/design/measure-store";
 import { placementOf } from "@/lib/design/placement";
-import { areaRect, isPrintSide, panelBox, placeRect, printRenderRect, type RectPlacement } from "@/lib/design/sides";
+import { areaRect, isPrintSide, panelBox, placeRect, printRenderRect, renderPad, type RectPlacement } from "@/lib/design/sides";
 import type { DesignSelection, PersonalStyle, PrintSelection } from "@/lib/pricing/types";
 import { disposeGroup, type GarmentBuild } from "./garment";
 import { modelAnchor, modelDecal, type DecalLook } from "./model";
@@ -306,7 +306,7 @@ export async function updatePrintLayers(
 
   for (const print of design.prints) {
     const look = lookFor(print.methodId);
-    const where = printPlacement(catalog, design, print, look.patch ? 6 : 2);
+    const where = printPlacement(catalog, design, print, renderPad(Boolean(look.patch)));
     if (!where) continue;
     const { rect, rp } = where;
     const elements = print.elements ?? [];

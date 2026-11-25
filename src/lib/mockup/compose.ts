@@ -1,7 +1,7 @@
 import type { Catalog } from "@/lib/catalog/types";
 import { withFreePrints } from "@/lib/design/logic";
 import { useMeasureStore } from "@/lib/design/measure-store";
-import { isPrintSide, panelBox, placeRect, printRenderRect } from "@/lib/design/sides";
+import { isPrintSide, panelBox, placeRect, printRenderRect, renderPad } from "@/lib/design/sides";
 import type { DesignSelection } from "@/lib/pricing/types";
 import type { PrintSamples } from "@/lib/three/print-layers";
 import { drawNamesList, drawNeckLabel, drawPersonalText, drawPrintRect, placeholderCanvas, type PatchStyle } from "@/lib/three/print-canvas";
@@ -461,7 +461,7 @@ export async function composeGarmentPhoto(o: ComposeOptions): Promise<Composed |
     if (!isPrintSide(print.areaId)) continue;
     const look = photoLook(print.methodId);
     const elements = print.elements ?? [];
-    const rect = printRenderRect(elements, panelBox(product.mockup, design.sleeve, print.areaId), measurements, look.patch ? 6 : 2);
+    const rect = printRenderRect(elements, panelBox(product.mockup, design.sleeve, print.areaId), measurements, renderPad(Boolean(look.patch)));
     const quad = placePrintOnPhoto(photo, placeRect(product.mockup, design.sleeve, print.areaId, rect));
     if (!quad) continue;
     if (elements.length || look.patch) layers.push({ quad, look, art: await drawPrintRect(elements, rect, look.patch ?? null) });

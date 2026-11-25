@@ -190,6 +190,11 @@ export function printRenderRect(elements: DesignElement[] | undefined, panel: Bo
   return { x: x0, y: y0, w: Math.max(1, x1 - x0), h: Math.max(1, y1 - y0) };
 }
 
+/** Room (mm) left around a print's artwork when it's drawn: patches need more, as the patch itself goes around it. */
+export function renderPad(patch: boolean): number {
+  return patch ? 10 : 2;
+}
+
 /** Where an empty print shows as a guide: a 10 cm square near the top middle. */
 export function placeholderRect(panel: Box): LocalBBox {
   const w = Math.min(100, panel.w);

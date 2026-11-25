@@ -5,6 +5,7 @@ import { isLightHex } from "@/components/garment/color";
 import type { FabricKind, PrintMethod } from "@/lib/catalog/types";
 import { PRINT_VIEW_MM, renderJob, type CloseUpJob } from "./jobs";
 import { srgbToLinear, type Art } from "./surface";
+import { inkBounds } from "@/lib/ink-bounds";
 
 /* ---------- drawing in a background worker ---------- */
 
@@ -187,11 +188,18 @@ export function sampleArt(methodId: string, garmentHex: string, size: number): H
  * take in the artwork's full diagonal).
  */
 export function fitArt(art: HTMLCanvasElement, wMm: number, hMm: number, size: number): { canvas: HTMLCanvasElement; viewMm: number } {
-  const viewMm = Math.min(450, Math.max(PRINT_VIEW_MM, Math.hypot(wMm, hMm) * 1.06));
+  // Centre on what's really drawn (lettering can sit off its box), falling back to the whole picture.
+  const pxPerMm = art.width / wMm;
+  const ink = inkBounds(art) ?? { x: 0, y: 0, w: art.width, h: art.height };
+  const inkW = ink.w / pxPerMm;
+  const inkH = ink.h / pxPerMm;
+  const viewMm = Math.min(450, Math.max(PRINT_VIEW_MM, Math.hypot(inkW, inkH) * 1.08));
   const k = size / viewMm;
+  const cx = (ink.x + ink.w / 2) / pxPerMm;
+  const cy = (ink.y + ink.h / 2) / pxPerMm;
   const canvas = document.createElement("canvas");
   canvas.width = canvas.height = size;
-  canvas.getContext("2d")!.drawImage(art, (size - wMm * k) / 2, (size - hMm * k) / 2, wMm * k, hMm * k);
+  canvas.getContext("2d")!.drawImage(art, size / 2 - cx * k, size / 2 - cy * k, wMm * k, hMm * k);
   return { canvas, viewMm };
 }
 

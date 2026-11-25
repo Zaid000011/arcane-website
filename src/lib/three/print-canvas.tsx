@@ -9,6 +9,7 @@ import { namesGrid } from "@/lib/design/personalization";
 import type { LocalBBox } from "@/lib/design/geometry";
 import type { DesignElement, TextElement } from "@/lib/design/types";
 import type { PersonalStyle } from "@/lib/pricing/types";
+import { inkBounds } from "@/lib/ink-bounds";
 
 /**
  * Draws print artwork onto a canvas at real print proportions (mm × scale),
@@ -152,17 +153,42 @@ export type PatchStyle = "woven" | "chenille" | null;
 /** Artwork for one print box. Patches get their fabric base and stitched edge. */
 export async function drawPrintCanvas(elements: DesignElement[], wMm: number, hMm: number, patch: PatchStyle = null): Promise<HTMLCanvasElement> {
   const { canvas, ctx, k } = makeCanvas(wMm, hMm);
-  if (patch) {
-    const pad = Math.min(canvas.width, canvas.height) * 0.04;
-    const radius = Math.min(canvas.width, canvas.height) * 0.12;
-    ctx.fillStyle = patch === "woven" ? "#f1e9d8" : "#efe4cc";
-    ctx.beginPath();
-    ctx.roundRect(pad, pad, canvas.width - pad * 2, canvas.height - pad * 2, radius);
-    ctx.fill();
-    ctx.lineWidth = pad * 1.2;
-    ctx.strokeStyle = patch === "woven" ? "#7a0a0a" : "#c9a227";
-    ctx.stroke();
+  if (!patch) {
+    await drawElements(ctx, elements, k);
+    return canvas;
   }
+  // A patch is cut around the artwork as it really shows. Fonts with swashes (script fonts) reach
+  // past their letter boxes, so a patch sized from the boxes would leave the text off-centre.
+  const art = makeCanvas(wMm, hMm);
+  await drawElements(art.ctx, elements, k);
+  const ink = inkBounds(art.canvas);
+  const margin = PATCH_MARGIN_MM * k;
+  const box = ink
+    ? {
+        x0: Math.max(0, ink.x - margin),
+        y0: Math.max(0, ink.y - margin),
+        x1: Math.min(canvas.width, ink.x + ink.w + margin),
+        y1: Math.min(canvas.height, ink.y + ink.h + margin),
+      }
+    : { x0: 0, y0: 0, x1: canvas.width, y1: canvas.height };
+  const bw = box.x1 - box.x0;
+  const bh = box.y1 - box.y0;
+  const rim = Math.max(2, Math.min(bw, bh) * 0.04);
+  ctx.fillStyle = patch === "woven" ? "#f1e9d8" : "#efe4cc";
+  ctx.beginPath();
+  ctx.roundRect(box.x0 + rim, box.y0 + rim, bw - rim * 2, bh - rim * 2, Math.min(bw, bh) * 0.12);
+  ctx.fill();
+  ctx.lineWidth = rim * 1.2;
+  ctx.strokeStyle = patch === "woven" ? "#7a0a0a" : "#c9a227";
+  ctx.stroke();
+  ctx.drawImage(art.canvas, 0, 0);
+  return canvas;
+}
+
+/** Room (mm) between a patch's edge and the artwork on it. */
+const PATCH_MARGIN_MM = 4.5;
+
+async function drawElements(ctx: CanvasRenderingContext2D, elements: DesignElement[], k: number) {
   for (const el of elements) {
     ctx.save();
     ctx.translate(el.x * k, el.y * k);
@@ -180,7 +206,6 @@ export async function drawPrintCanvas(elements: DesignElement[], wMm: number, hM
     }
     ctx.restore();
   }
-  return canvas;
 }
 
 /** A print's artwork cut to a rectangle of its panel (mm), ready to lay on the garment. */
