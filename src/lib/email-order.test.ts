@@ -2,8 +2,6 @@ import { describe, expect, it } from "vitest";
 import type { CartItem } from "@/lib/cart/store";
 import { seedCatalog } from "@/lib/catalog/seed";
 import { defaultDesign } from "@/lib/design/logic";
-import { FULL_TRIMS } from "@/lib/design/options";
-import { hasPhotos, photoTrimsFor } from "@/lib/mockup/photos";
 import { emptyOrder } from "@/lib/order/types";
 import { fitFiles } from "./email-inbox";
 import { orderEmail, requestEmail } from "./whatsapp-order";
@@ -58,14 +56,5 @@ describe("email attachments", () => {
     ]);
     expect(kept.map((f) => f.name)).toEqual(["front.jpg", "back.jpg"]);
     expect(skipped).toEqual(["huge.png"]);
-  });
-});
-
-describe("photos while 3D is off", () => {
-  it("show the standard photo for a garment without cuffs or waistband until its own photos exist", () => {
-    const trims = { cuffs: false, waistband: false };
-    expect(hasPhotos("hoodie", "long", trims)).toBe(false);
-    expect(photoTrimsFor("hoodie", "long", trims)).toEqual(FULL_TRIMS);
-    expect(photoTrimsFor("hoodie", "long", FULL_TRIMS)).toEqual(FULL_TRIMS);
   });
 });

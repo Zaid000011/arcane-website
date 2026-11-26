@@ -10,8 +10,8 @@ import { useDesignStore } from "@/lib/design/store";
 import type { DesignSelection } from "@/lib/pricing/types";
 import { useI18n } from "@/i18n/client";
 import { siteConfig } from "@/config/site";
-import { hasFullTrims, trimsOf } from "@/lib/design/options";
-import { hasPhotos } from "@/lib/mockup/photos";
+import { trimsOf } from "@/lib/design/options";
+import { photoMisses, photoNoteKey, photoPick } from "@/lib/mockup/photos";
 
 /** The garment (a real photo, or 3D to turn around) with front/back buttons, undo/redo and, on some steps, a close-up. */
 export function ViewerCard({
@@ -44,9 +44,9 @@ export function ViewerCard({
   const [hideCloseUp, setHideCloseUp] = useCloseUpHidden();
   const [mode, setMode] = useViewMode();
   const photo = mode === "photo" && canShowPhoto(catalog, design);
-  // While 3D is off, a garment without cuffs or waistband shows the standard photo: say so.
+  // Not every fit has photos without cuffs or waistband: say what the photo still shows.
   const trims = trimsOf(product, design);
-  const standardPhoto = photo && Boolean(product) && !hasFullTrims(trims) && !hasPhotos(product!.mockup, design.sleeve, trims);
+  const noteKey = photo && product ? photoNoteKey(photoMisses(photoPick(product.mockup, design.sleeve, design.fitId, trims), design.fitId, trims)) : null;
 
   return (
     <div className="card relative overflow-hidden bg-[radial-gradient(circle_at_50%_40%,rgba(201,162,39,0.16),transparent_62%)]">
@@ -87,9 +87,9 @@ export function ViewerCard({
           closeUp={hideCloseUp ? null : closeUp}
         />
       </div>
-      {standardPhoto ? (
+      {noteKey ? (
         <p className={`pointer-events-none absolute inset-x-0 bottom-12 flex justify-center px-3 ${mini ? "max-lg:hidden" : ""}`}>
-          <span className="max-w-[85%] rounded-full bg-ink/85 px-3 py-1 text-center text-[11px] text-gold-light">{t.trimsPhotoNote}</span>
+          <span className="max-w-[85%] rounded-full bg-ink/85 px-3 py-1 text-center text-[11px] text-gold-light">{t[noteKey]}</span>
         </p>
       ) : null}
       {closeUp ? (

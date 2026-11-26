@@ -29,7 +29,10 @@ describe("fabric close-ups", () => {
       for (const f of product.fabrics) {
         const px = fabric(f.id, f.kind, "#7A0A0A");
         expect(px.length).toBe(SIZE * SIZE * 4);
-        for (let i = 3; i < px.length; i += 4) expect(px[i]).toBe(255);
+        // One check for the whole picture: an expect per pixel takes seconds.
+        let seeThrough = 0;
+        for (let i = 3; i < px.length; i += 4) if (px[i] !== 255) seeThrough++;
+        expect(seeThrough, `${product.id} ${f.id}`).toBe(0);
       }
     }
   });

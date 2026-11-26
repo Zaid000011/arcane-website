@@ -2,10 +2,11 @@ import * as THREE from "three";
 import { DecalGeometry } from "three/addons/geometries/DecalGeometry.js";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import type { MockupId, Sleeve } from "@/lib/catalog/types";
+import { fitKey } from "@/lib/design/options";
 import type { RectPlacement } from "@/lib/design/sides";
 import { recolorPixels } from "@/lib/mockup/shade";
 import { STATIC_ROOT } from "@/lib/site-mode";
-import type { Vec3 } from "./shape";
+import { clamp, specFor, type Vec3 } from "./shape";
 
 /**
  * Real 3D garments, made with AI from the same product photos the photo view
@@ -28,12 +29,18 @@ interface ModelFrame {
 /**
  * Measured on the photos each model was made from: the hoodie's hood-up front
  * (neckline at 653 px of 2048, 19.3 px per cm) and back (neckline 571 px,
- * 18.8 px per cm), mapped onto the model's 1.028-unit height.
+ * 18.8 px per cm), mapped onto the model's 1.028-unit height. The zip hoodie
+ * the same way (mockups-src/zipHoodie-long-front-hoodup and -back-hoodup:
+ * necklines at 648 and 545 px, 19.16 and 18.97 px per cm, shoulders 718 px).
  */
 const MODELS: Partial<Record<string, { file: string; frame: ModelFrame }>> = {
   "hoodie-long": {
     file: "hoodie-long.glb",
     frame: { front: { neck: [0, 0.707], perCm: 0.00981 }, back: { neck: [0, 0.748], perCm: 0.0096 }, hoodSeamY: 0.762, shoulderY: 0.689 },
+  },
+  "zipHoodie-long": {
+    file: "zipHoodie-long.glb",
+    frame: { front: { neck: [0.0053, 0.6975], perCm: 0.0097 }, back: { neck: [0.0046, 0.7471], perCm: 0.0096 }, hoodSeamY: 0.7471, shoulderY: 0.6621 },
   },
   // The rest come from their own front and back photos: `node scripts/model-frames.mjs public/models/<name>.glb`.
   "tshirt-short": {
@@ -134,8 +141,54 @@ const frameIn = (f: ModelFrame, s: number): ModelFrame => ({
   shoulderY: f.shoulderY * s,
 });
 
-/** A fresh copy of a garment model in a color, or null when there's no model for it. */
-export async function buildModel(mockup: MockupId, sleeve: Sleeve, color: string): Promise<ModelBuild | null> {
+/**
+ * Makes a model the cut of an oversized or boxy fit: wider outside the neck
+ * opening, and longer or shorter below the front neckline, by as much as the
+ * drawn garment changes for that fit (specFor). The collar or hood stays as it
+ * is, and the change eases in over a few cm so no crease shows. Returns the
+ * frame moved to match (in cm, like the geometry).
+ */
+function reshapeForFit(geometry: THREE.BufferGeometry, frame: ModelFrame, mockup: MockupId, fitId: string): ModelFrame {
+  if (!fitKey(fitId)) return frame;
+  const a = specFor(mockup, "regular");
+  const b = specFor(mockup, fitId);
+  // The models' units are the photos' print cm, a little bigger than real cm (PRINT_SCALE 0.88 in scripts/mockup-photos.mjs).
+  const k = 1 / 0.88;
+  const ease = 6;
+  const inner = a.neckHalf * k;
+  // Extra units per unit outside the neck opening, and below the front neckline.
+  const wide = (Math.max(0, b.chestHalf - a.chestHalf) * k) / Math.max(1, a.chestHalf * k - inner - ease / 2);
+  const long = ((b.length - a.length) * k) / Math.max(1, (a.length - a.frontNeckDrop) * k - ease / 2);
+  const deep = wide * 0.4;
+  const ramp = (u: number) => (u <= 0 ? 0 : u >= ease ? u - ease / 2 : (u * u) / (2 * ease));
+  const slope = (u: number) => clamp(u / ease, 0, 1);
+  const [neckX, neckY] = frame.front.neck;
+  geometry.computeBoundingBox();
+  const zMid = (geometry.boundingBox!.min.z + geometry.boundingBox!.max.z) / 2;
+  const pos = geometry.getAttribute("position") as THREE.BufferAttribute;
+  const nrm = geometry.getAttribute("normal") as THREE.BufferAttribute | undefined;
+  const n = new THREE.Vector3();
+  for (let i = 0; i < pos.count; i++) {
+    const x = pos.getX(i) - neckX;
+    const y = pos.getY(i);
+    const ux = Math.abs(x) - inner;
+    const uy = neckY - y;
+    pos.setXYZ(i, neckX + x + Math.sign(x) * wide * ramp(ux), y - long * ramp(uy), zMid + (pos.getZ(i) - zMid) * (1 + deep));
+    if (nrm) {
+      // A surface stretched along an axis turns away from it: divide by the stretch.
+      n.set(nrm.getX(i) / (1 + wide * slope(ux)), nrm.getY(i) / (1 + long * slope(uy)), nrm.getZ(i) / (1 + deep)).normalize();
+      nrm.setXYZ(i, n.x, n.y, n.z);
+    }
+  }
+  pos.needsUpdate = true;
+  if (nrm) nrm.needsUpdate = true;
+  geometry.computeBoundingBox();
+  geometry.computeBoundingSphere();
+  return { ...frame, shoulderY: frame.shoulderY - long * ramp(neckY - frame.shoulderY) };
+}
+
+/** A fresh copy of a garment model in a color and fit, or null when there's no model for it. */
+export async function buildModel(mockup: MockupId, sleeve: Sleeve, color: string, fitId = "regular"): Promise<ModelBuild | null> {
   const key = `${mockup}-${sleeve}`;
   const entry = MODELS[key];
   if (!entry) return null;
@@ -148,13 +201,15 @@ export async function buildModel(mockup: MockupId, sleeve: Sleeve, color: string
   texture.colorSpace = THREE.SRGBColorSpace;
   texture.anisotropy = 8;
   const material = new THREE.MeshStandardMaterial({ map: texture, roughness: 0.95, metalness: 0, side: THREE.DoubleSide });
-  const mesh = new THREE.Mesh(source.geometry.clone(), material);
+  const geometry = source.geometry.clone();
+  const frame = reshapeForFit(geometry, frameIn(entry.frame, 1 / entry.frame.front.perCm), mockup, fitId);
+  const mesh = new THREE.Mesh(geometry, material);
   mesh.castShadow = true;
   mesh.receiveShadow = true;
   const group = new THREE.Group();
   group.add(mesh);
   group.updateMatrixWorld(true);
-  const build: ModelBuild = { key, group, mesh, frame: frameIn(entry.frame, 1 / entry.frame.front.perCm), canvas, texture, source, color: "" };
+  const build: ModelBuild = { key: `${key}${fitKey(fitId)}`, group, mesh, frame, canvas, texture, source, color: "" };
   recolorModel(build, color);
   return build;
 }

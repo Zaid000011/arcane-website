@@ -2,15 +2,18 @@
 //
 //   npm run mockups
 //
-// Reads mockups-src/<mockup>-<sleeve>-<view>.png (2048×2048 white garments on a
-// transparent background, kept out of git) and scripts/mockup-landmarks.json
-// (points measured by hand on those photos), then writes:
+// Reads mockups-src/<mockup>-<sleeve>[-<fit>][-nocuffs][-noband]-<view>.png
+// (2048×2048 white garments on a transparent background, kept out of git) and
+// scripts/mockup-landmarks.json (points measured on those photos), then writes:
 //   public/mockups/<name>.webp       1600 px, for the designer
 //   public/mockups/720/<name>.webp   720 px, for small pictures (cart, cards)
 //   src/lib/mockup/photo-data.ts     the measurements the site places prints with
 //
+// Pictures newer than their photo are kept as they are (encoding is slow);
+// `npm run mockups -- --all` makes them all again.
+//
 // sharp comes with Next.js, so nothing extra needs installing.
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -20,6 +23,7 @@ const require = createRequire(path.join(root, "package.json"));
 const sharp = require("sharp");
 
 const SRC = path.join(root, "mockups-src");
+const ALL = process.argv.includes("--all");
 const OUT = path.join(root, "public", "mockups");
 const SIZES = [
   { dir: OUT, size: 1600 },
@@ -36,6 +40,9 @@ const SPEC = {
   varsity: { length: 66, front: 9, back: 2.5 },
 };
 
+// Oversized and boxy garments are longer or shorter (the same changes as specFor in shape.ts).
+const FIT_LENGTH = { oversized: 2, boxy: -4 };
+
 // The photographed garments sit on a slim form, so their chests look narrower
 // than a real garment's flat width. Scaling cm slightly down keeps prints the
 // size they'd look on a real person.
@@ -45,11 +52,16 @@ const landmarks = JSON.parse(readFileSync(path.join(root, "scripts", "mockup-lan
 for (const { dir } of SIZES) mkdirSync(dir, { recursive: true });
 
 const data = {};
-for (const [name, lm] of Object.entries(landmarks)) {
-  const [mockup, , view] = name.split("-");
+async function makePhoto([name, lm]) {
+  const parts = name.split("-");
+  const mockup = parts[0];
+  const view = parts[parts.length - 1];
+  const fit = parts.find((p) => p in FIT_LENGTH);
   const spec = SPEC[mockup];
-  if (!spec) throw new Error(`Unknown garment in ${name}`);
-  const { data: px, info } = await sharp(path.join(SRC, `${name}.png`)).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+  if (!spec || (view !== "front" && view !== "back")) throw new Error(`Unknown garment or view in ${name}`);
+  const length = spec.length + (fit ? FIT_LENGTH[fit] : 0);
+  const source = path.join(SRC, `${name}.png`);
+  const { data: px, info } = await sharp(source).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
   const W = info.width;
   const H = info.height;
 
@@ -77,19 +89,22 @@ for (const [name, lm] of Object.entries(landmarks)) {
   const white = Math.round(lum[Math.floor(lum.length * 0.9)]);
 
   const raw = sharp(px, { raw: { width: W, height: H, channels: 4 } });
+  const madeAfter = statSync(source).mtimeMs;
   for (const { dir, size } of SIZES) {
+    const out = path.join(dir, `${name}.webp`);
+    if (!ALL && existsSync(out) && statSync(out).mtimeMs > madeAfter) continue;
     await raw
       .clone()
       .resize(size, size, { kernel: "lanczos3" })
       .webp({ quality: 86, alphaQuality: 100, effort: 6, smartSubsample: true })
-      .toFile(path.join(dir, `${name}.webp`));
+      .toFile(out);
   }
 
   const drop = view === "front" ? spec.front : spec.back;
   data[name] = {
     size: W,
     box: [x0, y0, x1, y1],
-    px: Math.round(((lm.hem - lm.neck[1]) / (spec.length - drop)) * PRINT_SCALE * 100) / 100,
+    px: Math.round(((lm.hem - lm.neck[1]) / (length - drop)) * PRINT_SCALE * 100) / 100,
     neck: lm.neck,
     white,
     ...(lm.label ? { label: lm.label } : {}),
@@ -100,11 +115,22 @@ for (const [name, lm] of Object.entries(landmarks)) {
   console.log(name, `white ${white}`, `${data[name].px} px/cm`);
 }
 
+// A few photos at a time: encoding mostly waits on one core each.
+const entries = Object.entries(landmarks);
+let next = 0;
+await Promise.all(
+  Array.from({ length: 4 }, async () => {
+    while (next < entries.length) await makePhoto(entries[next++]);
+  }),
+);
+// In the landmark file's order, whatever order they finished in.
+const ordered = Object.fromEntries(entries.map(([name]) => [name, data[name]]));
+
 const ts = `// Made by \`npm run mockups\` (scripts/mockup-photos.mjs) from the photos and
 // scripts/mockup-landmarks.json. Change those and run it again instead of editing this.
 import type { PhotoData } from "./photos";
 
-export const PHOTO_DATA: Record<string, PhotoData> = ${JSON.stringify(data, null, 2)
+export const PHOTO_DATA: Record<string, PhotoData> = ${JSON.stringify(ordered, null, 2)
   .replace(/\[\s+([-\d.]+),\s+([-\d.]+)\s+\]/g, "[$1, $2]")
   .replace(/\[\s+([-\d.]+),\s+([-\d.]+),\s+([-\d.]+),\s+([-\d.]+)\s+\]/g, "[$1, $2, $3, $4]")
   .replace(/\[\s+(\[[^\]]+\]),\s+(\[[^\]]+\])\s+\]/g, "[$1, $2]")
@@ -112,4 +138,4 @@ export const PHOTO_DATA: Record<string, PhotoData> = ${JSON.stringify(data, null
 `;
 mkdirSync(path.join(root, "src", "lib", "mockup"), { recursive: true });
 writeFileSync(path.join(root, "src", "lib", "mockup", "photo-data.ts"), ts);
-console.log(`Wrote ${Object.keys(data).length} photos.`);
+console.log(`Wrote ${entries.length} photos.`);

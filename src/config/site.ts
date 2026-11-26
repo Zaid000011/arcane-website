@@ -16,10 +16,10 @@ export const siteConfig = {
    */
   orderEmail: "zaidmohad892@gmail.com",
   /**
-   * The Photo | 3D switch in the designer and on group pages. Off for now: every garment shows
-   * as a real photo. Turn it back on once the remaining 3D models are made.
+   * The Photo | 3D switch in the designer and on group pages. Every garment has a real 3D
+   * model now; set this to false to show photos only.
    */
-  show3d: false,
+  show3d: true,
   /** Where customers can pick up orders. */
   pickupLocation: { en: "", ar: "" },
   /**

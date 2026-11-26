@@ -3,14 +3,14 @@ import { placementOf } from "@/lib/design/placement";
 import type { RectPlacement } from "@/lib/design/sides";
 import { STATIC_ROOT } from "@/lib/site-mode";
 import { PHOTO_DATA } from "./photo-data";
-import { FULL_TRIMS, trimsKey, type GarmentTrims } from "@/lib/design/options";
-import { siteConfig } from "@/config/site";
+import { FULL_TRIMS, fitKey, trimsKey, type GarmentTrims } from "@/lib/design/options";
 
 /**
  * Real-looking garment photos: one white garment photographed from the front
- * and from the back for every garment and sleeve length. The site recolors
- * them and lays the customer's prints on them (see compose.ts). This file says
- * where everything goes on each photo, in the photo's own pixels.
+ * and from the back for every garment and sleeve length, and again for each
+ * looser fit and without rib cuffs or waistband. The site recolors them and
+ * lays the customer's prints on them (see compose.ts). This file says where
+ * everything goes on each photo, in the photo's own pixels.
  */
 
 export type Pt = [number, number];
@@ -62,25 +62,62 @@ export function photoViewFor(view: string): PhotoView {
   return view === "back" ? "back" : "front";
 }
 
-export function garmentPhoto(mockup: MockupId, sleeve: Sleeve, view: PhotoView, trims: GarmentTrims = FULL_TRIMS): GarmentPhoto | null {
-  const name = `${mockup}-${sleeve}${trimsKey(trims)}-${view}`;
+export function garmentPhoto(mockup: MockupId, sleeve: Sleeve, view: PhotoView, trims: GarmentTrims = FULL_TRIMS, fitId = "regular"): GarmentPhoto | null {
+  const name = `${mockup}-${sleeve}${fitKey(fitId)}${trimsKey(trims)}-${view}`;
   const data = PHOTO_DATA[name];
   return data ? { ...data, name, mockup, sleeve, view } : null;
 }
 
-/**
- * The trims to look for photos with: the garment's own, or (while the 3D view is off) the
- * standard ones when there are no photos without cuffs or waistband yet.
- */
-export function photoTrimsFor(mockup: MockupId, sleeve: Sleeve, trims: GarmentTrims): GarmentTrims {
-  if (siteConfig.show3d || hasPhotos(mockup, sleeve, trims)) return trims;
-  return FULL_TRIMS;
+/** True when this garment (in this fit and with these trims) has both a front and a back photo. */
+export function hasPhotos(mockup: MockupId, sleeve: Sleeve, trims: GarmentTrims = FULL_TRIMS, fitId = "regular"): boolean {
+  const base = `${mockup}-${sleeve}${fitKey(fitId)}${trimsKey(trims)}`;
+  return Boolean(PHOTO_DATA[`${base}-front`] && PHOTO_DATA[`${base}-back`]);
 }
 
-/** True when this garment has both a front and a back photo. */
-export function hasPhotos(mockup: MockupId, sleeve: Sleeve, trims: GarmentTrims = FULL_TRIMS): boolean {
-  const base = `${mockup}-${sleeve}${trimsKey(trims)}`;
-  return Boolean(PHOTO_DATA[`${base}-front`] && PHOTO_DATA[`${base}-back`]);
+/** Which photos show a garment: the fit and trims they were taken with. */
+export interface PhotoPick {
+  fitId: string;
+  trims: GarmentTrims;
+}
+
+/**
+ * The photos closest to the garment as ordered: its own fit and trims when
+ * there are photos of them, otherwise its fit with cuffs and waistband (a fit
+ * changes the whole shape), then the regular fit without them, then the
+ * standard photos every garment has.
+ */
+export function photoPick(mockup: MockupId, sleeve: Sleeve, fitId: string, trims: GarmentTrims): PhotoPick {
+  const choices: PhotoPick[] = [
+    { fitId, trims },
+    { fitId, trims: FULL_TRIMS },
+    { fitId: "regular", trims },
+    { fitId: "regular", trims: FULL_TRIMS },
+  ];
+  return choices.find((c) => hasPhotos(mockup, sleeve, c.trims, c.fitId)) ?? choices[3]!;
+}
+
+/** What the picked photos show that the garment won't have: cuffs, a waistband, another fit. */
+export interface PhotoMisses {
+  cuffs: boolean;
+  waistband: boolean;
+  fit: boolean;
+}
+
+export function photoMisses(pick: PhotoPick, fitId: string, trims: GarmentTrims): PhotoMisses {
+  return {
+    cuffs: !trims.cuffs && pick.trims.cuffs,
+    waistband: !trims.waistband && pick.trims.waistband,
+    fit: fitKey(fitId) !== fitKey(pick.fitId),
+  };
+}
+
+/** The note that says what the photo still shows, or null when it shows the garment as ordered. */
+export function photoNoteKey(m: PhotoMisses): "trimsPhotoNote" | "photoStillBoth" | "photoStillCuffs" | "photoStillBand" | null {
+  if (m.fit) return "trimsPhotoNote";
+  if (m.cuffs && m.waistband) return "photoStillBoth";
+  if (m.cuffs) return "photoStillCuffs";
+  if (m.waistband) return "photoStillBand";
+  return null;
 }
 
 /** The photo file: the big one for the designer, a small one for little pictures. */

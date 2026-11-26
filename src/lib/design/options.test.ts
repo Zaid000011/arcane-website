@@ -7,7 +7,7 @@ import { designSchema } from "@/lib/validation";
 import { en } from "@/i18n/dictionaries/en";
 import { describeDesign } from "./describe";
 import { defaultDesign, normalizeDesign, switchProduct } from "./logic";
-import { bodyHex, canRemoveCuffs, canRemoveWaistband, trimsKey, trimsOf } from "./options";
+import { bodyHex, canRemoveCuffs, canRemoveWaistband, fitKey, trimsKey, trimsOf } from "./options";
 
 const product = (id: string) => seedCatalog.products.find((p) => p.id === id)!;
 
@@ -67,10 +67,11 @@ describe("taking off cuffs and waistband", () => {
     expect(specFor("hoodie", "regular").cuff).toBeGreaterThan(0);
     expect(trimsKey({ cuffs: false, waistband: true })).toBe("-nocuffs");
     expect(trimsKey({ cuffs: false, waistband: false })).toBe("-nocuffs-noband");
-    // Until photos without them are made, the garment shows in 3D.
-    expect(hasPhotos("hoodie", "long", { cuffs: false, waistband: true })).toBe(false);
-    expect(garmentPhoto("hoodie", "long", "front", { cuffs: true, waistband: false })).toBeNull();
+    // Each has its own photos, with plain hems where the rib was; looser fits have theirs too.
+    expect(hasPhotos("hoodie", "long", { cuffs: false, waistband: true })).toBe(true);
+    expect(garmentPhoto("hoodie", "long", "front", { cuffs: true, waistband: false })!.name).toBe("hoodie-long-noband-front");
     expect(hasPhotos("hoodie", "long")).toBe(true);
+    expect([fitKey("regular"), fitKey("oversized"), fitKey("boxy"), fitKey("slim")]).toEqual(["", "-oversized", "-boxy", ""]);
     const d = { ...defaultDesign(seedCatalog, "hoodie"), noCuffs: true, noWaistband: true };
     const order = { sizes: { M: 1 }, deliverySpeedId: "standard" };
     expect(quote(seedCatalog, d, order).total).toBe(quote(seedCatalog, defaultDesign(seedCatalog, "hoodie"), order).total);

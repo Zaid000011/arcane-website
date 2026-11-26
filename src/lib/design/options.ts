@@ -48,3 +48,8 @@ export function trimsKey(trims: GarmentTrims = FULL_TRIMS): string {
 export function hasFullTrims(trims: GarmentTrims): boolean {
   return trims.cuffs && trims.waistband;
 }
+
+/** Name part for a garment photo in a looser fit: "", "-oversized" or "-boxy". */
+export function fitKey(fitId: string): string {
+  return fitId === "oversized" || fitId === "boxy" ? `-${fitId}` : "";
+}

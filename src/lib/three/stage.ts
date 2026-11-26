@@ -6,7 +6,7 @@ import { applyFinish, buildGarment, disposeGroup, fabricFinish, setFabricColor, 
 import { buildModel, hasModel, recolorModel, type ModelBuild } from "./model";
 import type { Vec3 } from "./shape";
 import { groundShadow } from "./textures";
-import { FULL_TRIMS, hasFullTrims, trimsKey, type GarmentTrims } from "@/lib/design/options";
+import { FULL_TRIMS, fitKey, hasFullTrims, trimsKey, type GarmentTrims } from "@/lib/design/options";
 
 export type StageView = "front" | "back" | "left" | "right";
 
@@ -112,9 +112,10 @@ export class GarmentStage {
     fabric: { id: string; kind: string } = { id: "cotton", kind: "cotton" },
     trims: GarmentTrims = FULL_TRIMS,
   ) {
-    // A real 3D model, when this garment has one: the drawn garment shows until it has loaded.
-    // The models have rib cuffs and waistbands, so without them the drawn garment is used.
-    const modelKey = hasFullTrims(trims) && hasModel(mockup, sleeve) ? `${mockup}-${sleeve}` : "";
+    // A real 3D model, when this garment has one (reshaped for looser fits): the drawn garment
+    // shows until it has loaded. The models have rib cuffs and waistbands, so without them the
+    // drawn garment is used.
+    const modelKey = hasFullTrims(trims) && hasModel(mockup, sleeve) ? `${mockup}-${sleeve}${fitKey(fitId)}` : "";
     this.modelColor = color;
     if (modelKey && this.model?.key === modelKey) {
       recolorModel(this.model, color);
@@ -129,7 +130,7 @@ export class GarmentStage {
     }
     this.wantModel = modelKey;
     if (modelKey) {
-      void buildModel(mockup, sleeve, color)
+      void buildModel(mockup, sleeve, color, fitId)
         .then((build) => {
           if (!build) return;
           if (this.disposed || this.wantModel !== modelKey) {

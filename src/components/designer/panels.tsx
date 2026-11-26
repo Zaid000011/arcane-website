@@ -10,7 +10,8 @@ import { sleeveLabels, startingPrice, tierHints, tierLabels, tr } from "@/lib/ca
 import type { Catalog, Product } from "@/lib/catalog/types";
 import { addPrint, defaultDesign, methodBlock, removePrint, switchProduct, updatePrint } from "@/lib/design/logic";
 import { isPrintSide, MAX_PRINTS_PER_SIDE, maxTierOf, printBounds, sideNames, sidesFor, sideView, tierLimitCm, type PrintSide } from "@/lib/design/sides";
-import { bodyHex, canRemoveCuffs, canRemoveWaistband, HEX_COLOR } from "@/lib/design/options";
+import { bodyHex, canRemoveCuffs, canRemoveWaistband, HEX_COLOR, trimsOf } from "@/lib/design/options";
+import { photoMisses, photoNoteKey, photoPick } from "@/lib/mockup/photos";
 import { useDesignStore } from "@/lib/design/store";
 import { closestColor } from "@/lib/color-match";
 import { printPhotoUrl } from "@/lib/print-photos";
@@ -36,6 +37,9 @@ export function GarmentPanel({ catalog, design, product, update, onSendSize }: P
   const t = dict.designer;
   const sleeves = (["short", "long"] as const).filter((s) => product.basePrice[s] !== undefined);
   const fits = product.fitIds.map((id) => catalog.fits.find((f) => f.id === id)).filter((f): f is NonNullable<typeof f> => Boolean(f));
+  // Not every fit has photos without cuffs or waistband: say what the photo still shows.
+  const trims = trimsOf(product, design);
+  const trimsNote = photoNoteKey(photoMisses(photoPick(product.mockup, design.sleeve, design.fitId, trims), design.fitId, trims));
 
   return (
     <div className="space-y-8">
@@ -121,8 +125,11 @@ export function GarmentPanel({ catalog, design, product, update, onSendSize }: P
                 </div>
               </div>
             ) : null}
-            {(design.noCuffs && canRemoveCuffs(product, design.sleeve)) || (design.noWaistband && canRemoveWaistband(product)) ? (
-              <p className="rounded-lg bg-ink/60 px-3 py-2 text-xs text-cream-muted">{siteConfig.show3d ? t.trims3dNote : t.trimsPhotoNote}</p>
+            {trimsNote ? (
+              <p className="rounded-lg bg-ink/60 px-3 py-2 text-xs text-cream-muted">
+                {t[trimsNote]}
+                {siteConfig.show3d ? ` ${t.trims3dNote}` : ""}
+              </p>
             ) : null}
           </div>
         </section>
