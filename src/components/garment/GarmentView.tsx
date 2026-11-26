@@ -5,7 +5,8 @@ import dynamic from "next/dynamic";
 import { useCallback, useEffect, useState } from "react";
 import type { CloseUpView } from "@/components/three/CloseUpOverlay";
 import type { Catalog } from "@/lib/catalog/types";
-import { hasPhotos } from "@/lib/mockup/photos";
+import { hasPhotos, photoTrimsFor } from "@/lib/mockup/photos";
+import { siteConfig } from "@/config/site";
 import type { DesignSelection } from "@/lib/pricing/types";
 import type { PrintSamples } from "@/lib/three/print-layers";
 import type { StageView } from "@/lib/three/stage";
@@ -21,10 +22,11 @@ export type ViewMode = "photo" | "3d";
 
 const KEY = "arcane.viewMode";
 
-/** The picture type, remembered while the browser tab stays open. */
+/** The picture type, remembered while the browser tab stays open. Always the photo while 3D is off. */
 export function useViewMode(): [ViewMode, (mode: ViewMode) => void] {
   const [mode, setMode] = useState<ViewMode>("photo");
   useEffect(() => {
+    if (!siteConfig.show3d) return;
     try {
       if (sessionStorage.getItem(KEY) === "3d") setMode("3d");
     } catch {
@@ -45,7 +47,7 @@ export function useViewMode(): [ViewMode, (mode: ViewMode) => void] {
 /** True when the design can be shown as a photo (every garment has photos; this guards new ones). */
 export function canShowPhoto(catalog: Catalog, design: DesignSelection): boolean {
   const product = catalog.products.find((p) => p.id === design.productId) ?? catalog.products[0];
-  return Boolean(product && hasPhotos(product.mockup, design.sleeve, trimsOf(product, design)));
+  return Boolean(product && hasPhotos(product.mockup, design.sleeve, photoTrimsFor(product.mockup, design.sleeve, trimsOf(product, design))));
 }
 
 /** The garment as a photo or in 3D. Falls back to 3D when there's no photo or it can't load. */

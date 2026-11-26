@@ -8,6 +8,18 @@ export const siteConfig = {
   instagramUrl: "",
   /** WhatsApp number in international format without "+", e.g. "201001234567". */
   whatsappNumber: "201223766447",
+  /**
+   * Where orders and "send it to us" requests from the GitHub Pages copy are emailed, with
+   * pictures of the design (sent through FormSubmit, formsubmit.co). The first one asks you to
+   * confirm by email; FormSubmit then also sends a private code that can replace the address
+   * here, so the address isn't visible in the site's code.
+   */
+  orderEmail: "zaidmohad892@gmail.com",
+  /**
+   * The Photo | 3D switch in the designer and on group pages. Off for now: every garment shows
+   * as a real photo. Turn it back on once the remaining 3D models are made.
+   */
+  show3d: false,
   /** Where customers can pick up orders. */
   pickupLocation: { en: "", ar: "" },
   /**

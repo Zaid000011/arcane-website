@@ -14,6 +14,7 @@ import type { GroupMember, PublicGroup } from "@/lib/group/types";
 import { formatDate } from "@/lib/order/dates";
 import { useI18n } from "@/i18n/client";
 import { fmt } from "@/i18n/format";
+import { siteConfig } from "@/config/site";
 
 type Mode = "loading" | "form" | "joined" | "editing";
 const emptyForm = { name: "", phone: "", number: "", sizeId: "", quantity: 1 };
@@ -318,7 +319,7 @@ function JoinViewer({ catalog, group, name, number }: { catalog: Catalog; group:
             </button>
           ))}
         </div>
-        {photos ? <ViewModeToggle mode={mode} onChange={setMode} /> : null}
+        {siteConfig.show3d && photos ? <ViewModeToggle mode={mode} onChange={setMode} /> : null}
       </div>
       <div className={`h-[46vh] lg:h-[60vh] ${photo ? "" : "cursor-grab"}`}>
         <GarmentView
@@ -333,7 +334,7 @@ function JoinViewer({ catalog, group, name, number }: { catalog: Catalog; group:
       </div>
       <p className="pointer-events-none absolute inset-x-0 bottom-2 flex justify-center px-3">
         <span className="inline-flex items-center gap-1.5 rounded-full bg-ink/70 px-3 py-1 text-center text-xs text-cream-muted">
-          {photo ? <Camera className="h-3.5 w-3.5 shrink-0" aria-hidden /> : <Rotate3d className="h-3.5 w-3.5 shrink-0" aria-hidden />} {photo ? t.photoHint : t.dragToRotate}
+          {photo ? <Camera className="h-3.5 w-3.5 shrink-0" aria-hidden /> : <Rotate3d className="h-3.5 w-3.5 shrink-0" aria-hidden />} {photo ? (siteConfig.show3d ? t.photoHint : t.photoOnlyHint) : t.dragToRotate}
         </span>
       </p>
     </div>

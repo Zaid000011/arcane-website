@@ -4,6 +4,7 @@ import type { RectPlacement } from "@/lib/design/sides";
 import { STATIC_ROOT } from "@/lib/site-mode";
 import { PHOTO_DATA } from "./photo-data";
 import { FULL_TRIMS, trimsKey, type GarmentTrims } from "@/lib/design/options";
+import { siteConfig } from "@/config/site";
 
 /**
  * Real-looking garment photos: one white garment photographed from the front
@@ -65,6 +66,15 @@ export function garmentPhoto(mockup: MockupId, sleeve: Sleeve, view: PhotoView, 
   const name = `${mockup}-${sleeve}${trimsKey(trims)}-${view}`;
   const data = PHOTO_DATA[name];
   return data ? { ...data, name, mockup, sleeve, view } : null;
+}
+
+/**
+ * The trims to look for photos with: the garment's own, or (while the 3D view is off) the
+ * standard ones when there are no photos without cuffs or waistband yet.
+ */
+export function photoTrimsFor(mockup: MockupId, sleeve: Sleeve, trims: GarmentTrims): GarmentTrims {
+  if (siteConfig.show3d || hasPhotos(mockup, sleeve, trims)) return trims;
+  return FULL_TRIMS;
 }
 
 /** True when this garment has both a front and a back photo. */

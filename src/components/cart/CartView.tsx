@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertTriangle, Copy, MessageCircle, Pencil, ShoppingBag, Trash2 } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Copy, Loader2, MessageCircle, Pencil, Send, ShoppingBag, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
@@ -23,6 +23,7 @@ import { STATIC_SITE } from "@/lib/site-mode";
 import { orderMessage } from "@/lib/whatsapp-order";
 import { useI18n } from "@/i18n/client";
 import { fmt, formatMoney } from "@/i18n/format";
+import { canEmail } from "@/lib/email-inbox";
 
 export function CartView({ catalog }: { catalog: Catalog }) {
   const { locale, dict } = useI18n();
@@ -36,6 +37,25 @@ export function CartView({ catalog }: { catalog: Catalog }) {
   const [waPhone, setWaPhone] = useState("");
   const [waTouched, setWaTouched] = useState(false);
   const waPhoneOk = Boolean(normalizePhone(waPhone));
+  // The order (with pictures of each design) is emailed to the shop; WhatsApp is for chatting after.
+  const [sendState, setSendState] = useState<"idle" | "sending" | "sent" | "failed">("idle");
+  useEffect(() => {
+    setSendState((s) => (s === "sending" ? s : "idle"));
+  }, [items, waPhone]);
+  const sendOrder = async () => {
+    if (!waPhoneOk) {
+      setWaTouched(true);
+      return;
+    }
+    setSendState("sending");
+    try {
+      const { emailOrder } = await import("@/lib/email-order");
+      await emailOrder(catalog, useCartStore.getState().items, waPhone, locale);
+      setSendState("sent");
+    } catch {
+      setSendState("failed");
+    }
+  };
 
   if (!ready) return <div className="section min-h-[50vh] py-14" aria-busy="true" />;
 
@@ -118,7 +138,40 @@ export function CartView({ catalog }: { catalog: Catalog }) {
                 />
                 <span className={`mt-1 block text-xs ${waTouched && !waPhoneOk ? "text-arcane-bright" : "text-cream-muted"}`}>{waTouched && !waPhoneOk ? t.waPhoneInvalid : t.waPhoneHint}</span>
               </label>
-              {waPhoneOk ? (
+              {canEmail() ? (
+                sendState === "sent" ? (
+                  <div role="status" className="space-y-3 rounded-xl border border-gold/50 bg-gold/10 p-4">
+                    <p className="flex items-center gap-2 font-semibold text-cream">
+                      <CheckCircle2 className="h-5 w-5 shrink-0 text-gold" aria-hidden /> {t.orderSentTitle}
+                    </p>
+                    <p className="text-sm leading-relaxed text-cream-muted">{t.orderSentBody}</p>
+                    <a href={whatsappTo(siteConfig.whatsappNumber, orderMessage(catalog, items, locale, dict, waPhone))} target="_blank" rel="noopener noreferrer" className="btn btn-secondary w-full">
+                      <MessageCircle className="h-4 w-4" aria-hidden /> {t.chatWhatsapp}
+                    </a>
+                  </div>
+                ) : (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => void sendOrder()}
+                      disabled={sendState === "sending"}
+                      aria-disabled={!waPhoneOk}
+                      className={`btn btn-primary w-full py-3.5 text-base ${waPhoneOk ? "" : "opacity-60"}`}
+                    >
+                      {sendState === "sending" ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <Send className="h-4 w-4 rtl:-scale-x-100" aria-hidden />}
+                      {sendState === "sending" ? t.sendingOrder : t.sendOrder}
+                    </button>
+                    {sendState === "failed" ? (
+                      <div role="alert" className="space-y-2 rounded-lg bg-arcane/60 px-3 py-2 text-sm text-cream">
+                        <p>{t.orderSendFailed}</p>
+                        <a href={whatsappTo(siteConfig.whatsappNumber, orderMessage(catalog, items, locale, dict, waPhone))} target="_blank" rel="noopener noreferrer" className="btn btn-secondary w-full">
+                          <MessageCircle className="h-4 w-4" aria-hidden /> {t.orderWhatsapp}
+                        </a>
+                      </div>
+                    ) : null}
+                  </>
+                )
+              ) : waPhoneOk ? (
                 <a
                   href={whatsappTo(siteConfig.whatsappNumber, orderMessage(catalog, items, locale, dict, waPhone))}
                   target="_blank"
@@ -132,7 +185,7 @@ export function CartView({ catalog }: { catalog: Catalog }) {
                   <MessageCircle className="h-4 w-4" aria-hidden /> {t.orderWhatsapp}
                 </button>
               )}
-              <p className="text-xs leading-relaxed text-cream-muted">{t.orderWhatsappHint}</p>
+              {sendState === "sent" ? null : <p className="text-xs leading-relaxed text-cream-muted">{canEmail() ? t.orderEmailHint : t.orderWhatsappHint}</p>}
             </>
           ) : (
             <Link href="/checkout" className="btn btn-primary w-full py-3.5 text-base">

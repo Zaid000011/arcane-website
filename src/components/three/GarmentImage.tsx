@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import type { Catalog } from "@/lib/catalog/types";
 import { trimsOf } from "@/lib/design/options";
-import { hasPhotos } from "@/lib/mockup/photos";
+import { hasPhotos, photoTrimsFor } from "@/lib/mockup/photos";
 import type { DesignSelection } from "@/lib/pricing/types";
 import type { PrintSamples } from "@/lib/three/print-layers";
 import type { StageView } from "@/lib/three/stage";
@@ -39,7 +39,8 @@ export function GarmentImage({
     let alive = true;
     const product = catalog.products.find((p) => p.id === design.productId) ?? catalog.products[0];
     const render3d = () => import("@/lib/three/snapshots").then(({ renderGarmentImage }) => renderGarmentImage(catalog, design, view, width, height, samples));
-    const photo = (view === "front" || view === "back") && product && hasPhotos(product.mockup, design.sleeve, trimsOf(product, design));
+    const photo =
+      (view === "front" || view === "back") && product && hasPhotos(product.mockup, design.sleeve, photoTrimsFor(product.mockup, design.sleeve, trimsOf(product, design)));
     const picture = photo
       ? import("@/lib/mockup/stills")
           .then(({ renderPhotoImage }) => renderPhotoImage(catalog, design, view, width, height, samples))

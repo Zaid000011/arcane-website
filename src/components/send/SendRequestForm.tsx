@@ -1,6 +1,6 @@
 "use client";
 
-import { CheckCircle2, FileText, MessageCircle, Palette, Ruler, Upload, X } from "lucide-react";
+import { CheckCircle2, FileText, MessageCircle, Palette, Ruler, Send, Upload, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { siteConfig } from "@/config/site";
 import { ApiError, api, whatsappTo } from "@/lib/api-client";
@@ -24,6 +24,7 @@ import {
 } from "@/lib/requests/types";
 import { useI18n } from "@/i18n/client";
 import { fmt } from "@/i18n/format";
+import { canEmail, MAX_EMAIL_BYTES } from "@/lib/email-inbox";
 
 const CONTACT_KEY = "arcane-contact";
 const MAX_PHOTOS = 3;
@@ -71,8 +72,11 @@ export function SendRequestForm({ catalog, kind, onKindChange, productId: initia
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [sent, setSent] = useState<string | null>(null);
-  // On GitHub Pages there's no server: the request opens WhatsApp instead.
+  // On GitHub Pages there's no server: the request is emailed (files included) and WhatsApp is for chatting.
   const [waLink, setWaLink] = useState<string | null>(null);
+  const [emailed, setEmailed] = useState(false);
+  // Files can go by email on GitHub Pages; without an inbox they're added in WhatsApp instead.
+  const filesHere = !STATIC_SITE || canEmail();
 
   // Remember the name and number from last time on this device.
   useEffect(() => {
@@ -105,7 +109,7 @@ export function SendRequestForm({ catalog, kind, onKindChange, productId: initia
   const problems = {
     name: name.trim().length < 2,
     phone: !normalizePhone(phone),
-    files: !STATIC_SITE && kind === "design" && designFiles.length === 0,
+    files: filesHere && kind === "design" && designFiles.length === 0,
     color: kind === "color" && !color,
     quantity: quantity.trim() !== "" && !(Number.isInteger(toNumber(quantity)) && toNumber(quantity) >= 1 && toNumber(quantity) <= 100_000),
     measures: kind === "size" && (Object.keys(RANGES) as Measure[]).some(measureBad),
@@ -123,7 +127,10 @@ export function SendRequestForm({ catalog, kind, onKindChange, productId: initia
       }
       if (!looksLikeRequestFile(f.name, kind === "color")) notes.push(fmt(t.fileBadType, { name: f.name }));
       else if (f.size > MAX_REQUEST_FILE_BYTES) notes.push(fmt(t.fileTooBig, { name: f.name, mb: MAX_REQUEST_FILE_MB }));
-      else if (!next.some((x) => x.name === f.name && x.size === f.size)) next.push(f);
+      else if (STATIC_SITE && next.reduce((sum, x) => sum + x.size, 0) + f.size > MAX_EMAIL_BYTES) {
+        notes.push(t.emailFilesTooBig);
+        break;
+      } else if (!next.some((x) => x.name === f.name && x.size === f.size)) next.push(f);
     }
     setFiles(next);
     setFileNote(notes.length ? notes.join(" ") : null);
@@ -150,13 +157,30 @@ export function SendRequestForm({ catalog, kind, onKindChange, productId: initia
     };
     if (STATIC_SITE) {
       const link = whatsappTo(siteConfig.whatsappNumber, requestMessage(catalog, data as unknown as CustomRequestInput, locale, dict));
-      setWaLink(link);
-      window.open(link, "_blank", "noopener,noreferrer");
       try {
         localStorage.setItem(CONTACT_KEY, JSON.stringify({ name: name.trim(), phone }));
       } catch {
         // Not saved on this device; nothing else depends on it.
       }
+      if (canEmail()) {
+        setBusy(true);
+        try {
+          const { emailRequest } = await import("@/lib/email-order");
+          await emailRequest(catalog, data as unknown as Omit<CustomRequestInput, "locale">, files, locale);
+          setEmailed(true);
+          setWaLink(link);
+          onSent?.();
+        } catch {
+          // Couldn't email it: WhatsApp still works.
+          setError(t.sendFailedWhatsapp);
+          setWaLink(link);
+        } finally {
+          setBusy(false);
+        }
+        return;
+      }
+      setWaLink(link);
+      window.open(link, "_blank", "noopener,noreferrer");
       onSent?.();
       return;
     }
@@ -184,6 +208,7 @@ export function SendRequestForm({ catalog, kind, onKindChange, productId: initia
   const reset = () => {
     setSent(null);
     setWaLink(null);
+    setEmailed(false);
     setTouched(false);
     setDesignFiles([]);
     setPhotos([]);
@@ -223,12 +248,12 @@ export function SendRequestForm({ catalog, kind, onKindChange, productId: initia
   if (waLink) {
     return (
       <div role="status" className="scroll-mt-24 py-6 text-center" ref={(el) => el?.scrollIntoView({ block: "nearest", behavior: "smooth" })}>
-        <MessageCircle className="mx-auto h-14 w-14 text-gold" aria-hidden />
-        <h3 className="mt-3 font-display text-3xl tracking-wide uppercase">{t.whatsappOpenedTitle}</h3>
-        <p className="mx-auto mt-2 max-w-md text-cream-muted">{t.whatsappOpenedBody}</p>
+        {emailed ? <CheckCircle2 className="mx-auto h-14 w-14 text-gold" aria-hidden /> : <MessageCircle className="mx-auto h-14 w-14 text-gold" aria-hidden />}
+        <h3 className="mt-3 font-display text-3xl tracking-wide uppercase">{emailed ? t.emailSentTitle : t.whatsappOpenedTitle}</h3>
+        <p className="mx-auto mt-2 max-w-md text-cream-muted">{emailed ? t.emailSentBody : error ?? t.whatsappOpenedBody}</p>
         <div className="mt-6 flex flex-wrap justify-center gap-3">
-          <a href={waLink} target="_blank" rel="noopener noreferrer" className="btn btn-primary">
-            <MessageCircle className="h-4 w-4" aria-hidden /> {t.whatsappSubmit}
+          <a href={waLink} target="_blank" rel="noopener noreferrer" className={emailed ? "btn btn-secondary" : "btn btn-primary"}>
+            <MessageCircle className="h-4 w-4" aria-hidden /> {emailed ? t.chatWhatsapp : t.whatsappSubmit}
           </a>
           {onDone ? (
             <button type="button" onClick={onDone} className="btn btn-secondary">
@@ -275,8 +300,8 @@ export function SendRequestForm({ catalog, kind, onKindChange, productId: initia
 
       <p className="text-sm leading-relaxed text-cream-muted">{t.intros[kind]}</p>
 
-      {kind === "design" && STATIC_SITE ? <WhatsappNote>{t.filesInWhatsapp}</WhatsappNote> : null}
-      {kind === "design" && !STATIC_SITE ? (
+      {kind === "design" && !filesHere ? <WhatsappNote>{t.filesInWhatsapp}</WhatsappNote> : null}
+      {kind === "design" && filesHere ? (
         <FilePicker
           label={t.files}
           hint={fmt(t.filesHint, { max: MAX_REQUEST_FILES, mb: MAX_REQUEST_FILE_MB })}
@@ -324,8 +349,8 @@ export function SendRequestForm({ catalog, kind, onKindChange, productId: initia
           <Field label={t.colorName}>
             <input value={colorName} onChange={(e) => setColorName(e.target.value)} maxLength={80} dir="auto" placeholder={t.colorNamePlaceholder} className={fieldClass(false)} />
           </Field>
-          {STATIC_SITE ? <WhatsappNote>{t.photoInWhatsapp}</WhatsappNote> : null}
-          {STATIC_SITE ? null : (
+          {filesHere ? null : <WhatsappNote>{t.photoInWhatsapp}</WhatsappNote>}
+          {!filesHere ? null : (
             <FilePicker
             label={t.photos}
             hint={t.photosHint}
@@ -398,8 +423,8 @@ export function SendRequestForm({ catalog, kind, onKindChange, productId: initia
       ) : null}
 
       <button type="submit" disabled={busy} className="btn btn-primary w-full py-3.5 text-base disabled:opacity-60">
-        {STATIC_SITE ? <MessageCircle className="h-4 w-4" aria-hidden /> : null}
-        {busy ? t.sending : STATIC_SITE ? t.whatsappSubmit : t.submit}
+        {STATIC_SITE ? canEmail() ? <Send className="h-4 w-4 rtl:-scale-x-100" aria-hidden /> : <MessageCircle className="h-4 w-4" aria-hidden /> : null}
+        {busy ? t.sending : STATIC_SITE ? (canEmail() ? t.emailSubmit : t.whatsappSubmit) : t.submit}
       </button>
     </form>
   );

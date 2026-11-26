@@ -7,11 +7,13 @@ import { describeDesign, describeSizes } from "@/lib/design/describe";
 import { effectiveSizes } from "@/lib/order/roster";
 import type { CustomRequestInput } from "@/lib/validation";
 import type { Dictionary } from "@/i18n/dictionaries/en";
+import { en } from "@/i18n/dictionaries/en";
 import { fmt, formatMoney } from "@/i18n/format";
 
 /**
  * Messages for the GitHub Pages copy of the site, which has no server: the
- * cart and the "send it to us" forms open WhatsApp with everything filled in.
+ * cart and the "send it to us" forms email the order (with pictures of the
+ * design) and open WhatsApp with everything filled in.
  */
 
 const MAX_PEOPLE = 60;
@@ -71,4 +73,79 @@ export function requestMessage(catalog: Catalog, r: Omit<CustomRequestInput, "lo
   if (r.kind === "design") lines.push("", t.waFiles);
   if (r.kind === "color") lines.push("", t.waPhoto);
   return lines.join("\n");
+}
+
+/* ---------- Emails to the shop (always in English) ---------- */
+
+export interface EmailContent {
+  subject: string;
+  fields: [string, string][];
+}
+
+const languageName = (locale: Locale) => (locale === "ar" ? "Arabic" : "English");
+
+/** An order from the cart as email fields, one detail per line, and a subject that says what came in. */
+export function orderEmail(catalog: Catalog, items: CartItem[], phone: string, customerLocale: Locale): EmailContent {
+  const d = en.designer;
+  const number = normalizePhone(phone) ?? phone;
+  const fields: [string, string][] = [
+    ["Customer WhatsApp", number],
+    ["Customer's language", languageName(customerLocale)],
+  ];
+  let total = 0;
+  let pieces = 0;
+  items.forEach((item, index) => {
+    const n = index + 1;
+    const { design, quote } = priceItem(catalog, item.design, item.order);
+    const info = describeDesign(catalog, design, "en", d);
+    const sizes = effectiveSizes(item.order, design.personalization);
+    const speed = catalog.deliverySpeeds.find((x) => x.id === item.order.deliverySpeedId);
+    total += quote.total;
+    pieces += quote.quantity;
+    fields.push([`Design ${n}`, info.garment]);
+    fields.push([`Design ${n} color`, info.colors.join(", ")]);
+    fields.push([`Design ${n} prints`, info.prints.length ? info.prints.join(" / ") : d.noPrints]);
+    if (info.personalization.length) fields.push([`Design ${n} names and numbers`, info.personalization.join(", ")]);
+    fields.push([`Design ${n} pieces`, `${fmt(d.piecesTotal, { count: quote.quantity })} (${describeSizes(catalog, sizes)})`]);
+    const people = item.order.roster.filter((r) => r.name || r.number);
+    if (people.length) {
+      fields.push([
+        `Design ${n} people`,
+        people.map((r) => [r.name, r.number, catalog.sizes.find((x) => x.id === r.sizeId)?.label ?? r.sizeId].filter(Boolean).join(" · ")).join("; "),
+      ]);
+    }
+    if (speed) fields.push([`Design ${n} delivery`, tr(speed.name, "en")]);
+    fields.push([`Design ${n} price`, formatMoney(quote.total, "en")]);
+  });
+  fields.push(["Total", formatMoney(total, "en")]);
+  fields.push(["Pictures", "The front and back of each design are attached, with any images the customer uploaded."]);
+  return { subject: `New order: ${pieces} pieces, ${formatMoney(total, "en")} (${number})`, fields };
+}
+
+const KIND_NAMES = { design: "their own design", color: "a color", size: "a custom size" } as const;
+
+/** A "send it to us" request as email fields. */
+export function requestEmail(catalog: Catalog, r: Omit<CustomRequestInput, "locale">, customerLocale: Locale): EmailContent {
+  const t = en.send;
+  const product = catalog.products.find((p) => p.id === r.productId);
+  const number = normalizePhone(r.phone) ?? r.phone;
+  const fields: [string, string][] = [
+    ["Request", `Send it to us: ${KIND_NAMES[r.kind]}`],
+    ["Name", r.name],
+    ["Customer WhatsApp", number],
+    ["Customer's language", languageName(customerLocale)],
+    [t.garment, product ? tr(product.name, "en") : t.garmentAny],
+  ];
+  if (r.quantity) fields.push([t.waQuantity, String(r.quantity)]);
+  if (r.color) fields.push([t.colorCode, `${r.color.hex}${r.color.name ? ` (${r.color.name})` : ""}`]);
+  if (r.size) {
+    const z = r.size;
+    fields.push([t.chest, `${z.chest} cm`], [t.length, `${z.length} cm`]);
+    if (z.sleeve) fields.push([t.waSleeve, `${z.sleeve} cm`]);
+    if (z.height) fields.push([t.waHeight, `${z.height} cm`]);
+    if (z.weight) fields.push([t.waWeight, `${z.weight} kg`]);
+    fields.push([t.sizeCount, String(z.count)]);
+  }
+  if (r.message) fields.push(["Message", r.message]);
+  return { subject: `New request: ${KIND_NAMES[r.kind]} from ${r.name} (${number})`, fields };
 }

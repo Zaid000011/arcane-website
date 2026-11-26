@@ -9,6 +9,9 @@ import type { Catalog } from "@/lib/catalog/types";
 import { useDesignStore } from "@/lib/design/store";
 import type { DesignSelection } from "@/lib/pricing/types";
 import { useI18n } from "@/i18n/client";
+import { siteConfig } from "@/config/site";
+import { hasFullTrims, trimsOf } from "@/lib/design/options";
+import { hasPhotos } from "@/lib/mockup/photos";
 
 /** The garment (a real photo, or 3D to turn around) with front/back buttons, undo/redo and, on some steps, a close-up. */
 export function ViewerCard({
@@ -38,6 +41,9 @@ export function ViewerCard({
   const [hideCloseUp, setHideCloseUp] = useCloseUpHidden();
   const [mode, setMode] = useViewMode();
   const photo = mode === "photo" && canShowPhoto(catalog, design);
+  // While 3D is off, a garment without cuffs or waistband shows the standard photo: say so.
+  const trims = trimsOf(product, design);
+  const standardPhoto = photo && Boolean(product) && !hasFullTrims(trims) && !hasPhotos(product!.mockup, design.sleeve, trims);
 
   return (
     <div className="card relative overflow-hidden bg-[radial-gradient(circle_at_50%_40%,rgba(201,162,39,0.16),transparent_62%)]">
@@ -55,7 +61,7 @@ export function ViewerCard({
             </button>
           ))}
         </div>
-        {canShowPhoto(catalog, design) ? <ViewModeToggle mode={mode} onChange={setMode} /> : null}
+        {siteConfig.show3d && canShowPhoto(catalog, design) ? <ViewModeToggle mode={mode} onChange={setMode} /> : null}
       </div>
       <div className="absolute end-3 top-3 z-10 flex gap-1 rounded-full border border-line bg-ink/80 p-1">
         <IconButton label={t.undo} disabled={!canUndo} onClick={undo}>
@@ -78,6 +84,11 @@ export function ViewerCard({
           closeUp={hideCloseUp ? null : closeUp}
         />
       </div>
+      {standardPhoto ? (
+        <p className="pointer-events-none absolute inset-x-0 bottom-12 flex justify-center px-3">
+          <span className="max-w-[85%] rounded-full bg-ink/85 px-3 py-1 text-center text-[11px] text-gold-light">{t.trimsPhotoNote}</span>
+        </p>
+      ) : null}
       {closeUp ? (
         <button
           type="button"
@@ -91,7 +102,7 @@ export function ViewerCard({
       ) : null}
       <p className={`pointer-events-none absolute inset-x-0 bottom-2 justify-center px-3 ${compact ? "hidden lg:flex" : "flex"}`}>
         <span className="inline-flex items-center gap-1.5 rounded-full bg-ink/70 px-3 py-1 text-center text-xs text-cream-muted">
-          {photo ? <Camera className="h-3.5 w-3.5 shrink-0" aria-hidden /> : <Rotate3d className="h-3.5 w-3.5 shrink-0" aria-hidden />} {photo ? t.photoHint : t.dragToRotate}
+          {photo ? <Camera className="h-3.5 w-3.5 shrink-0" aria-hidden /> : <Rotate3d className="h-3.5 w-3.5 shrink-0" aria-hidden />} {photo ? (siteConfig.show3d ? t.photoHint : t.photoOnlyHint) : t.dragToRotate}
         </span>
       </p>
     </div>

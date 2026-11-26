@@ -19,6 +19,7 @@ import { useI18n } from "@/i18n/client";
 import { fmt, formatDelta, formatMoney } from "@/i18n/format";
 import { ArtworkPanel } from "./ArtworkPanel";
 import { Choice, FieldLabel } from "./controls";
+import { siteConfig } from "@/config/site";
 
 export interface PanelProps {
   catalog: Catalog;
@@ -121,7 +122,7 @@ export function GarmentPanel({ catalog, design, product, update, onSendSize }: P
               </div>
             ) : null}
             {(design.noCuffs && canRemoveCuffs(product, design.sleeve)) || (design.noWaistband && canRemoveWaistband(product)) ? (
-              <p className="rounded-lg bg-ink/60 px-3 py-2 text-xs text-cream-muted">{t.trims3dNote}</p>
+              <p className="rounded-lg bg-ink/60 px-3 py-2 text-xs text-cream-muted">{siteConfig.show3d ? t.trims3dNote : t.trimsPhotoNote}</p>
             ) : null}
           </div>
         </section>

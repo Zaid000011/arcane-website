@@ -6,7 +6,7 @@ import type { DesignSelection } from "@/lib/pricing/types";
 import type { PrintSamples } from "@/lib/three/print-layers";
 import { drawNamesList, drawNeckLabel, drawPersonalText, drawPrintRect, placeholderCanvas, type PatchStyle } from "@/lib/three/print-canvas";
 import { clamp01, encode, garmentLut, LIN, LUT_STEPS, SHADE_MAX, shoulder, smoothstep } from "./shade";
-import { garmentPhoto, labelOnPhoto, photoUrl, placeOnPhoto, placePrintOnPhoto, type GarmentPhoto, type PhotoQuad, type PhotoView, type Pt } from "./photos";
+import { garmentPhoto, labelOnPhoto, photoUrl, placeOnPhoto, placePrintOnPhoto, type GarmentPhoto, type PhotoQuad, type PhotoView, type Pt, photoTrimsFor } from "./photos";
 import { bodyHex, trimsOf } from "@/lib/design/options";
 
 /**
@@ -449,7 +449,7 @@ export async function composeGarmentPhoto(o: ComposeOptions): Promise<Composed |
   const { catalog } = o;
   const design = withFreePrints(catalog, o.design);
   const product = catalog.products.find((p) => p.id === design.productId) ?? catalog.products[0]!;
-  const photo = garmentPhoto(product.mockup, design.sleeve, o.view, trimsOf(product, design));
+  const photo = garmentPhoto(product.mockup, design.sleeve, o.view, photoTrimsFor(product.mockup, design.sleeve, trimsOf(product, design)));
   if (!photo || o.width < 2 || o.height < 2) return null;
   const color = bodyHex(catalog, design);
   const pad = o.pad ?? DEFAULT_PAD;

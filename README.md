@@ -41,7 +41,11 @@ The link works only while both are running, and it changes every time `npm run s
 
 The site also runs on GitHub Pages at https://zaid000011.github.io/arcane-website/ (Arabic under `/ar/`). GitHub Pages only serves files, so that copy has no server:
 - **Works there:** the home page, the designer (garment photos and 3D) with its close-ups, prices, the cart and "send it to us".
-- **Goes to WhatsApp instead:** the cart's checkout becomes "Order on WhatsApp", and "send it to us" opens WhatsApp. Both go to the number in `src/config/site.ts`, and both first ask for the customer's number, which must be an Egyptian mobile number (010, 011, 012 or 015), like every form on the full site.
+- **Orders and requests are emailed:** the cart's checkout becomes "Send order", which emails the whole order to `orderEmail` in `src/config/site.ts`. The email carries one detail per line and, attached as pictures, the front and back of each design, each print's artwork on its own and any images the customer uploaded. "Send it to us" requests are emailed the same way, with the customer's files.
+  - It goes through FormSubmit (formsubmit.co), a free service that turns a form post into an email, since there's no server (`src/lib/email-inbox.ts`, `src/lib/email-order.ts`). The 10 MB limit covers all attachments together; anything past it is listed in the email instead.
+  - The first email ever sent makes FormSubmit ask you to confirm the address. Until you click that link, orders wait at FormSubmit and are delivered afterwards, but without their pictures.
+  - FormSubmit then also sends a private code that can replace the address in `orderEmail`, so the address isn't visible in the site's code.
+  - Afterwards the customer can chat on WhatsApp (the number in `src/config/site.ts`). Both forms first ask for the customer's number, which must be an Egyptian mobile number (010, 011, 012 or 015), like every form on the full site.
 - **Not there:** online checkout, group order links, order pages and the admin panel. Those need the full site with its server and database.
 
 To update it after changing the site, or prices in the admin panel, run `npm run pages:publish`. It builds both languages and uploads them to the `gh-pages` branch, and the link updates within a minute or two. `npm run pages` only builds it, into `.static-build/site`.
@@ -66,6 +70,7 @@ To update it after changing the site, or prices in the admin panel, run `npm run
 | How each print method looks in 3D (puff height, thread, shine) | `src/lib/three/print-layers.ts` |
 | Garment photos and where prints sit on them | Originals in `mockups-src/` (2048 px PNGs, kept out of git), points measured on them in `scripts/mockup-landmarks.json`. Then run `npm run mockups`: it writes `public/mockups/` and `src/lib/mockup/photo-data.ts` |
 | How each print method looks on the photos (soaks in, shine, raised edges, thread) | `LOOKS` in `src/lib/mockup/compose.ts` |
+| Show or hide the Photo \| 3D switch (off for now: photos only; a garment without cuffs or waistband then shows its standard photo with a note) | `show3d` in `src/config/site.ts` |
 | Real 3D garment models (every garment except the zip hoodie) | AI models in `public/models/` (made smaller by `node scripts/shrink-glb.mjs`; originals in `mockups-src/models/`). Where prints land on each is measured in `MODELS` in `src/lib/three/model.ts`; `node scripts/model-frames.mjs public/models/<name>.glb` works that out for a new model from the photos it was made from |
 | The close-up photos in "Print types explained" | `public/print-types/<print type id>.webp` (originals in `mockups-src/print-types/`) |
 
