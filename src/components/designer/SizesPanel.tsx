@@ -40,7 +40,17 @@ export function SizesPanel({ catalog, design, quote, onSendSize }: Omit<PanelPro
     <div className="space-y-8">
       <section>
         <FieldLabel hint={fmt(t.piecesTotal, { count: pieces })}>{t.sizesTitle}</FieldLabel>
-        <p className="mb-3 text-sm text-cream-muted">{roster ? t.rosterIntro : t.sizesIntro}</p>
+        <p className="mb-3 text-sm text-cream-muted">
+          {roster ? t.rosterIntro : t.sizesIntro}
+          {roster ? (
+            <>
+              {" "}
+              <button type="button" onClick={() => useDesignStore.getState().setStep("names")} className="text-start font-semibold text-gold underline-offset-2 hover:text-gold-light hover:underline">
+                {t.rosterNamesOff}
+              </button>
+            </>
+          ) : null}
+        </p>
         <SizeChartButton catalog={catalog} productId={design.productId} fitId={design.fitId} sleeve={design.sleeve} onSendSize={onSendSize} className="mb-4" />
         {roster ? (
           <RosterEditor catalog={catalog} order={order} setOrder={setOrder} showName={design.personalization.names} showNumber={design.personalization.numbers} />
@@ -167,7 +177,7 @@ function RosterEditor({
   const { dict } = useI18n();
   const t = dict.designer;
   const sizes = catalog.sizes;
-  const [pasteOpen, setPasteOpen] = useState(order.roster.length === 0);
+  const [pasteOpen, setPasteOpen] = useState(false);
   const [pasteText, setPasteText] = useState("");
   const [message, setMessage] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -184,6 +194,7 @@ function RosterEditor({
 
   return (
     <div className="space-y-3">
+      <QuickAdd catalog={catalog} showName={showName} showNumber={showNumber} onAdd={(row) => setRows([...order.roster, row])} />
       {order.roster.length > 0 ? (
         <div className="overflow-hidden rounded-xl border border-line">
           <div className="hidden grid-cols-[2rem_1fr_5rem_6rem_2.25rem] gap-2 bg-wine-deep/70 px-3 py-2 text-xs font-semibold text-cream-muted sm:grid" aria-hidden>
@@ -259,17 +270,6 @@ function RosterEditor({
       <div className="flex flex-wrap gap-2">
         <button
           type="button"
-          onClick={() => {
-            const row: RosterEntry = { id: newElementId(), name: "", number: "", sizeId: "" };
-            lastAddedRef.current = row.id;
-            setRows([...order.roster, row]);
-          }}
-          className="inline-flex items-center gap-1.5 rounded-lg border border-gold/50 px-3 py-2 text-sm font-semibold text-cream hover:border-gold hover:bg-gold/10"
-        >
-          <UserPlus className="h-4 w-4" aria-hidden /> {t.addPerson}
-        </button>
-        <button
-          type="button"
           aria-expanded={pasteOpen}
           onClick={() => setPasteOpen((v) => !v)}
           className="inline-flex items-center gap-1.5 rounded-lg border border-line px-3 py-2 text-sm text-cream-muted hover:border-gold hover:text-cream"
@@ -337,3 +337,72 @@ function RosterEditor({
   );
 }
 
+/** Add a person in two taps: their name or number, then their size. The sizes are always in view. */
+function QuickAdd({ catalog, showName, showNumber, onAdd }: { catalog: Catalog; showName: boolean; showNumber: boolean; onAdd: (row: RosterEntry) => void }) {
+  const { dict } = useI18n();
+  const t = dict.designer;
+  const [name, setName] = useState("");
+  const [number, setNumber] = useState("");
+  const [added, setAdded] = useState<string | null>(null);
+  const first = useRef<HTMLInputElement>(null);
+  const add = (sizeId: string, label: string) => {
+    onAdd({ id: newElementId(), name: name.trim(), number, sizeId });
+    setAdded(fmt(t.quickAdded, { who: name.trim() || (number ? `#${number}` : t.quickAddSomeone), size: label }));
+    setName("");
+    setNumber("");
+    first.current?.focus();
+  };
+  return (
+    <div className="space-y-3 rounded-xl border border-gold/50 bg-gold/5 p-3 sm:p-4">
+      <p className="flex items-center gap-2 text-sm font-semibold text-cream">
+        <UserPlus className="h-4 w-4 shrink-0 text-gold" aria-hidden /> {t.quickAddTitle}
+      </p>
+      {showName || showNumber ? (
+        <div className="flex gap-2">
+          {showName ? (
+            <input
+              ref={first}
+              type="text"
+              value={name}
+              maxLength={40}
+              dir="auto"
+              placeholder={t.name}
+              aria-label={t.name}
+              onChange={(e) => setName(e.target.value)}
+              className="h-10 min-w-0 flex-1 rounded-lg border border-line bg-ink px-3 text-sm text-cream placeholder:text-cream-muted/60 focus:border-gold focus:outline-none"
+            />
+          ) : null}
+          {showNumber ? (
+            <input
+              ref={showName ? undefined : first}
+              type="text"
+              inputMode="numeric"
+              value={number}
+              maxLength={3}
+              placeholder={t.number}
+              aria-label={t.number}
+              onChange={(e) => setNumber(e.target.value.replace(/[^0-9]/g, ""))}
+              className={`h-10 rounded-lg border border-line bg-ink px-3 text-center text-sm text-cream placeholder:text-cream-muted/60 focus:border-gold focus:outline-none ${showName ? "w-20" : "min-w-0 flex-1"}`}
+            />
+          ) : null}
+        </div>
+      ) : null}
+      <div role="group" aria-label={t.sizeColumn} className="flex flex-wrap gap-1.5">
+        {catalog.sizes.map((s) => (
+          <button
+            key={s.id}
+            type="button"
+            onClick={() => add(s.id, s.label)}
+            className="min-w-12 rounded-lg border border-gold/50 bg-ink px-3 py-2 text-sm font-semibold text-cream transition-colors hover:border-gold hover:bg-gold hover:text-ink"
+            dir="ltr"
+          >
+            {s.label}
+          </button>
+        ))}
+      </div>
+      <p role="status" className="text-xs text-cream-muted">
+        {added ?? t.quickAddHint}
+      </p>
+    </div>
+  );
+}

@@ -343,7 +343,12 @@ export const en = {
 
     sizesTitle: "Sizes and quantity",
     sizesIntro: "How many pieces do you need in each size?",
-    rosterIntro: "Add one row per person. Each row is one piece.",
+    rosterIntro: "You're printing names or numbers, so each piece is for one person: add everyone with their size.",
+    rosterNamesOff: "Not printing names or numbers? Change it in the Names step.",
+    quickAddTitle: "Add a person: write their details, then tap their size",
+    quickAddHint: "Each tap on a size adds one piece. Anyone's size can be changed in the list below.",
+    quickAdded: "Added {who} in {size}.",
+    quickAddSomeone: "a piece",
     name: "Name",
     number: "Number",
     sizeColumn: "Size",
