@@ -35,6 +35,13 @@ import { SizesPanel } from "./SizesPanel";
 /** Steps after which quantities matter (so "add at least one piece" isn't shown too early). */
 const ORDER_STEPS: DesignerStep[] = ["sizes", "review"];
 
+/** A box that brings up the phone's keyboard (or picker) when tapped. */
+function isTypingField(el: EventTarget | null): boolean {
+  if (!(el instanceof HTMLElement)) return false;
+  if (el instanceof HTMLTextAreaElement || el instanceof HTMLSelectElement) return true;
+  return el instanceof HTMLInputElement && !["checkbox", "radio", "range", "color", "button", "submit", "file", "reset", "image"].includes(el.type);
+}
+
 export function Designer({ catalog, initialProductId }: { catalog: Catalog; initialProductId?: string }) {
   const { locale, dict } = useI18n();
   const t = dict.designer;
@@ -54,6 +61,7 @@ export function Designer({ catalog, initialProductId }: { catalog: Catalog; init
   const [sendKind, setSendKind] = useState<RequestKind | null>(null);
   const [explainPrints, setExplainPrints] = useState(false);
   const viewerRef = useRef<HTMLDivElement>(null);
+  const [typing, setTyping] = useState(false);
 
   // On phones the garment stays pinned under the header on every step. Its height is shared as
   // --designer-viewer-h, so anything scrolled to (the step panel, a print) lands below it, not behind it.
@@ -221,18 +229,32 @@ export function Designer({ catalog, initialProductId }: { catalog: Catalog; init
       </div>
 
       <div className="grid gap-8 lg:grid-cols-[minmax(0,1.05fr)_minmax(0,1fr)]">
-        {/* Pinned on every step, so the garment stays in sight while every choice is made. */}
+        {/*
+          Pinned on every step, so the garment stays in sight while every choice is made. On phones it's
+          small on the steps about quantities, and it lets go while a box is being typed in, so the
+          keyboard and the garment never hide what's being typed.
+        */}
         <div
           ref={viewerRef}
-          className="sticky top-16 z-30 -mx-4 bg-ink/95 px-4 pb-2 backdrop-blur sm:-mx-6 sm:px-6 lg:top-20 lg:mx-0 lg:self-start lg:bg-transparent lg:px-0 lg:pb-0 lg:backdrop-blur-none"
+          className={`${typing ? "relative" : "sticky top-16"} z-30 -mx-4 bg-ink/95 px-4 pb-2 backdrop-blur sm:-mx-6 sm:px-6 lg:sticky lg:top-20 lg:mx-0 lg:self-start lg:bg-transparent lg:px-0 lg:pb-0 lg:backdrop-blur-none`}
         >
-          <ViewerCard catalog={catalog} design={design} placeholders={editing} compact closeUp={closeUp} />
+          <ViewerCard catalog={catalog} design={design} placeholders={editing} compact mini={step === "sizes" || step === "review"} closeUp={closeUp} />
           <div className="mt-4 hidden lg:block">
             <PriceSummary quote={quote} catalog={catalog} extraIssues={extraIssues} />
           </div>
         </div>
 
-        <div id="designer-panel" className="min-w-0 scroll-mt-[calc(var(--designer-viewer-h,0px)_+_4.5rem)]">
+        <div
+          id="designer-panel"
+          className="min-w-0 scroll-mt-[calc(var(--designer-viewer-h,0px)_+_4.5rem)]"
+          onFocusCapture={(e) => {
+            if (isTypingField(e.target)) setTyping(true);
+          }}
+          onBlurCapture={(e) => {
+            // Moving straight to another box keeps it let go (no jump in between).
+            if (isTypingField(e.target) && !isTypingField(e.relatedTarget)) setTyping(false);
+          }}
+        >
           <nav aria-label={t.title} className="mb-6">
             <ol className="-mx-1 flex snap-x gap-1.5 overflow-x-auto rounded-full border border-line bg-ink-2/70 p-1.5 [scrollbar-width:none]">
               {DESIGNER_STEPS.map((s, i) => (

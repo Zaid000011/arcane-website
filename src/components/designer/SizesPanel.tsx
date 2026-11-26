@@ -15,6 +15,8 @@ import { useI18n } from "@/i18n/client";
 import { fmt, formatMoney } from "@/i18n/format";
 import { FieldLabel } from "./controls";
 import { SendItButton, type PanelProps } from "./panels";
+import Link from "next/link";
+import { daysOff } from "@/lib/order/working-days";
 
 const MAX_ROWS = 500;
 
@@ -63,6 +65,12 @@ export function SizesPanel({ catalog, design, quote, onSendSize }: Omit<PanelPro
 
       <section>
         <FieldLabel>{t.deliveryTitle}</FieldLabel>
+        <p className="-mt-1 mb-3 text-xs text-cream-muted">
+          {fmt(t.closedDaysNote, { days: daysOff(catalog, locale) })}{" "}
+          <Link href="/policies" className="font-semibold text-gold hover:text-gold-light">
+            {dict.nav.policies}
+          </Link>
+        </p>
         <div className="grid gap-2">
           {catalog.deliverySpeeds.map((speed) => {
             const fee = speed.percent > 0 && quote.subtotal > 0 ? Math.max(Math.round((quote.subtotal * speed.percent) / 100), speed.minFee) : 0;

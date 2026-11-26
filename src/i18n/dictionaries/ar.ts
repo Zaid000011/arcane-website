@@ -7,12 +7,14 @@ export const ar: Dictionary = {
       "صمّم هوديز وتيشيرتات وجواكت مخصصة لدفعات التخرج والزي المدرسي ومنتجات الأندية في مصر. اختر كل لون وطباعة وتفصيلة، ثم اجمع مقاسات وأسماء مجموعتك برابط واحد.",
     pricingTitle: "الأسعار",
     sizeChartTitle: "جدول المقاسات",
+    policiesTitle: "السياسات",
   },
 
   nav: {
     design: "صمّم",
     pricing: "الأسعار",
     sizeChart: "جدول المقاسات",
+    policies: "السياسات",
     howItWorks: "طريقة الطلب",
     printMethods: "أنواع الطباعة",
     faq: "الأسئلة الشائعة",
@@ -364,6 +366,7 @@ export const ar: Dictionary = {
     piecesTotal: "{count} قطعة",
     deliveryTitle: "سرعة التنفيذ",
     estimatedDelivery: "حوالي {date}",
+    closedDaysNote: "لا نعمل يوم {days}، لذلك تحسب مواعيد التسليم أيام العمل فقط.",
     feeFree: "بدون رسوم إضافية",
     unavailable: "غير متاح حاليًا",
 
@@ -925,6 +928,18 @@ export const ar: Dictionary = {
     otherSizeCta: "أرسله لنا",
     noChart: "لا يوجد جدول مقاسات لهذه القطعة بعد. اسألنا على واتساب.",
     close: "إغلاق",
+  },
+
+  policies: {
+    title: "السياسات",
+    intro: "طريقة عملنا، لتعرف ما يمكن توقعه.",
+    workingDaysTitle: "أيام العمل",
+    workingDays: "نعمل من {from} إلى {to}.",
+    closedDays: "لا نعمل في عطلة نهاية الأسبوع: نحن في إجازة {days} من كل أسبوع، وفي الإجازات الرسمية.",
+    ordersAnyDay: "يمكنك التصميم وإرسال طلبك في أي يوم. الطلبات والرسائل التي تصل في يوم إجازة نتعامل معها في أول يوم عمل بعده.",
+    deliveryCounts: "مواعيد التسليم في الموقع تحسب أيام العمل فقط، فأيام الإجازة محسوبة بالفعل.",
+    holidaysTitle: "الإجازات التي نغلق فيها",
+    holidaysNote: "تُضاف مواعيد العيد فور الإعلان عنها.",
   },
 
   footer: {

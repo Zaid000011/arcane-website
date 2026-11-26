@@ -19,12 +19,15 @@ export function ViewerCard({
   design,
   placeholders,
   compact,
+  mini = false,
   closeUp = null,
 }: {
   catalog: Catalog;
   design: DesignSelection;
   placeholders: boolean;
   compact: boolean;
+  /** On phones: just a small picture, no buttons (steps about quantities, where the form needs the room). */
+  mini?: boolean;
   closeUp?: CloseUpView | null;
 }) {
   const { locale, dict } = useI18n();
@@ -47,7 +50,7 @@ export function ViewerCard({
 
   return (
     <div className="card relative overflow-hidden bg-[radial-gradient(circle_at_50%_40%,rgba(201,162,39,0.16),transparent_62%)]">
-      <div className="absolute start-3 top-3 z-10 flex flex-col items-start gap-2">
+      <div className={`absolute start-3 top-3 z-10 flex flex-col items-start gap-2 ${mini ? "max-lg:hidden" : ""}`}>
         <div role="group" aria-label={t.viewLabel} className="flex rounded-full border border-line bg-ink/80 p-1 text-sm">
           {(["front", "back"] as const).map((v) => (
             <button
@@ -63,7 +66,7 @@ export function ViewerCard({
         </div>
         {siteConfig.show3d && canShowPhoto(catalog, design) ? <ViewModeToggle mode={mode} onChange={setMode} /> : null}
       </div>
-      <div className="absolute end-3 top-3 z-10 flex gap-1 rounded-full border border-line bg-ink/80 p-1">
+      <div className={`absolute end-3 top-3 z-10 flex gap-1 rounded-full border border-line bg-ink/80 p-1 ${mini ? "max-lg:hidden" : ""}`}>
         <IconButton label={t.undo} disabled={!canUndo} onClick={undo}>
           <Undo2 className="h-4 w-4 rtl:-scale-x-100" />
         </IconButton>
@@ -71,7 +74,7 @@ export function ViewerCard({
           <Redo2 className="h-4 w-4 rtl:-scale-x-100" />
         </IconButton>
       </div>
-      <div className={`${compact ? "h-[34vh]" : "h-[52vh]"} lg:h-[64vh] ${photo ? "" : "cursor-grab active:cursor-grabbing"}`}>
+      <div className={`${mini ? "h-[18vh]" : compact ? "h-[34vh]" : "h-[52vh]"} transition-[height] duration-300 lg:h-[64vh] ${photo ? "" : "cursor-grab active:cursor-grabbing"}`}>
         <GarmentView
           mode={mode}
           catalog={catalog}
@@ -85,7 +88,7 @@ export function ViewerCard({
         />
       </div>
       {standardPhoto ? (
-        <p className="pointer-events-none absolute inset-x-0 bottom-12 flex justify-center px-3">
+        <p className={`pointer-events-none absolute inset-x-0 bottom-12 flex justify-center px-3 ${mini ? "max-lg:hidden" : ""}`}>
           <span className="max-w-[85%] rounded-full bg-ink/85 px-3 py-1 text-center text-[11px] text-gold-light">{t.trimsPhotoNote}</span>
         </p>
       ) : null}

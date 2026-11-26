@@ -5,12 +5,14 @@ export const en = {
       "Design custom hoodies, t-shirts and jackets for graduating classes, school uniforms and club merch in Egypt. Pick every color, print and detail, then collect your group's sizes and names with one link.",
     pricingTitle: "Pricing",
     sizeChartTitle: "Size chart",
+    policiesTitle: "Policies",
   },
 
   nav: {
     design: "Design",
     pricing: "Pricing",
     sizeChart: "Size chart",
+    policies: "Policies",
     howItWorks: "How it works",
     printMethods: "Print methods",
     faq: "FAQ",
@@ -362,6 +364,7 @@ export const en = {
     piecesTotal: "{count} pieces",
     deliveryTitle: "Delivery speed",
     estimatedDelivery: "Around {date}",
+    closedDaysNote: "We don't work on {days}, so delivery dates count working days only.",
     feeFree: "No extra fee",
     unavailable: "Not available right now",
 
@@ -924,6 +927,18 @@ export const en = {
     otherSizeCta: "Send it to us",
     noChart: "There's no size chart for this garment yet. Ask us on WhatsApp.",
     close: "Close",
+  },
+
+  policies: {
+    title: "Policies",
+    intro: "How we work, so you know what to expect.",
+    workingDaysTitle: "Working days",
+    workingDays: "We work {from} to {to}.",
+    closedDays: "We don't work on weekends: we're closed every {days}, and on official holidays.",
+    ordersAnyDay: "You can design and send your order any day. Orders and messages that arrive on a day off are handled on the next working day.",
+    deliveryCounts: "Delivery dates on the site count working days only, so days off are already taken into account.",
+    holidaysTitle: "Holidays we're closed",
+    holidaysNote: "Eid dates are added as soon as they're announced.",
   },
 
   footer: {
